@@ -1,0 +1,5 @@
+"0","```r
+# Get descrptive stats 
+summary(office)
+
+```"

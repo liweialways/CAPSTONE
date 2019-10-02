@@ -1,0 +1,3 @@
+"0","# Load 2 hotel data"
+"0","hot1 <- read.csv('../raw_data/BOOKINGS_ATLCP.csv')"
+"0","hot2 <- read.csv('../raw_data/BOOKINGS_NYCHA.csv')"

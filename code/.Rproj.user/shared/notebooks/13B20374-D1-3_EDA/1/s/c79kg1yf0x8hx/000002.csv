@@ -1,0 +1,27 @@
+"0","```r
+#  
+pdf(NULL)
+dev.control(displaylist = \"enable\")
+
+par(mfrow = c(1, 1))
+barplot(small_tab, 
+        beside = TRUE, 
+        horiz = TRUE, 
+        las = 2, 
+        col = c(1:4),
+        main = \"Stop or reduce selling machines.\nProducts to increase varies by region.\",
+        xlab = \"Total profit by region and subcategory\",
+        adj = 0)
+axis(1, at=axTicks(1), labels=sprintf(\"$%s\", axTicks(1)), las = 2) # add $ to x-axis tics
+legend(x = \"topright\",  
+       legend = levels(office$Region), 
+       col = c(1:4),
+       pch = 15)
+
+profit_plot <- recordPlot()
+
+invisible(dev.off())
+
+profit_plot
+
+```"

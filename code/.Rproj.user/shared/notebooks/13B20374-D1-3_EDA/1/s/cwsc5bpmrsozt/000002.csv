@@ -1,0 +1,5 @@
+"0","```r
+# Make a cross-tab with margins
+addmargins(xtabs(~ Region + Category,  data = office))
+
+```"

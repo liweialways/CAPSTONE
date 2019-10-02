@@ -1,0 +1,6 @@
+"0","```r
+# Find correlation of quantiative variables
+cor(office[, 5:8])
+
+
+```"

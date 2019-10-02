@@ -1,0 +1,6 @@
+"0","```r
+# I prefer the correlation plot from the psych package
+library(psych)
+pairs.panels(office[, 5:8])
+
+```"

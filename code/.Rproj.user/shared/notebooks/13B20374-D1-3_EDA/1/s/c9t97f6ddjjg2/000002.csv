@@ -1,0 +1,5 @@
+"0","```r
+# Make a cross-tab with margins
+addmargins(prop.table(xtabs(~ Region + Sub.Category,  data = office)))
+
+```"

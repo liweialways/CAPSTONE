@@ -1,0 +1,10 @@
+"0","```r
+# Set grid pattern for graph arrangement
+par(mfrow = c(2, 3))
+boxplot(office$Year, main = \"Year\")
+boxplot(office$Sales, main = \"Sales\")
+boxplot(office$Quantity, main = \"Quantity\")
+boxplot(office$Discount, main = \"Discount\")
+boxplot(office$Profit, main = \"Profit\")
+
+```"

@@ -1,0 +1,9 @@
+"0","```r
+# Differentiate region with color, not they are alphabetical
+plot(office$Discount, office$Profit, col = office$Region)
+legend(x = \"topright\",  
+       legend = levels(office$Region), 
+       col = c(1:nlevels(office$Region)), 
+       pch = 1) 
+
+```"

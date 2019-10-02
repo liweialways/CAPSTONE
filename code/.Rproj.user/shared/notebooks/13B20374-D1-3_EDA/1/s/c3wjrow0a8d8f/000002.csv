@@ -1,0 +1,9 @@
+"0","```r
+Category_tab <- rbind(table(office$Category),
+                    prop.table(table(office$Category)),
+                    prop.table(table(office$Category))*100)
+row.names(Category_tab) <- c(\"Count\", \"Proportion\", \"Percent\")
+round(Category_tab, 2)
+
+
+```"

@@ -1,0 +1,8 @@
+"0","```r
+Region_tab <- rbind(table(office$Region),
+                    prop.table(table(office$Region)),
+                    prop.table(table(office$Region))*100)
+row.names(Region_tab) <- c(\"Count\", \"Proportion\", \"Percent\")
+round(Region_tab, 2)
+
+```"

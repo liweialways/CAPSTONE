@@ -1,0 +1,8 @@
+"0","```r
+# Load data 
+office <- read.csv(\"FDA_Office_Sup.csv\")
+
+# Examine data structure 
+str(office)
+summary(office)
+```"

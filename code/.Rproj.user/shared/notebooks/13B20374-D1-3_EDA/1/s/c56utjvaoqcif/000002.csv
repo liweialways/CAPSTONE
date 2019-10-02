@@ -1,0 +1,16 @@
+"0","```r
+# A common problem in coding is having unknown dependencies on variables or 
+# packages being used in earlier analysis. This happens when you are running 
+# code but do not close R or RStudio between sessions. To reduce the probability
+# of this happening you can clear your environmen t of variables, functions and
+# packages at the beginning of a script. That way you know your code is only
+# running on what is within that script.
+# Note: you can reorder a long comment with short-cut Ctrl+Shift+/
+
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste(\"package:\", names(sessionInfo()$otherPkgs), sep=\"\"), detach, character.only = TRUE, unload = TRUE)
+
+```"

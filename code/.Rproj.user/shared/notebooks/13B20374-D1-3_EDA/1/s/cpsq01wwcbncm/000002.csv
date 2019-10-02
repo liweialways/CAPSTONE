@@ -1,0 +1,7 @@
+"0","```r
+# base graphics
+par(mfrow = c(1, 1))
+plot(office$Region, office$Category)
+
+
+```"

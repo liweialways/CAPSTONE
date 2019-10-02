@@ -1,0 +1,5 @@
+"0","```r
+# Correlation plot
+plot(office[, 5:8])
+
+```"

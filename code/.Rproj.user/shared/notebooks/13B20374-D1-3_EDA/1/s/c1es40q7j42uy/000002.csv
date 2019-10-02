@@ -1,0 +1,7 @@
+"0","```r
+# base graphics barplots to see count distribution of factor levels
+barplot(table(office$Region), main = \"Why does South have half the sales of West\")
+barplot(table(office$Category), main = \"Office Supplies sell the most, probably the least expensive\")
+barplot(table(office$Sub.Category), main = \"Though copiers/machines have fewer sales,\nit will be interesting to see profits\", las = 2)
+
+```"

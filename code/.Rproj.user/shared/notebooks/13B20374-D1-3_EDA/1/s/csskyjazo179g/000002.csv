@@ -1,0 +1,7 @@
+"0","```r
+# Save the rds file so I can reuse anything from this file in another file
+save.image(\"office_TA.RData\")
+
+# recover using load()
+# load(\"office_TA.RData\")
+```"

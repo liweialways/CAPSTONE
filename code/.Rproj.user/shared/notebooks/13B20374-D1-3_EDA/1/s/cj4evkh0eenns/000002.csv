@@ -1,0 +1,11 @@
+"0","```r
+# Set grid pattern for graph arrangement with mfrow
+par(mfrow = c(2, 3))
+hist(office$Year)
+hist(office$Sales)
+hist(office$Quantity)
+hist(office$Discount)
+hist(office$Profit)
+
+
+```"

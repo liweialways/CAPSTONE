@@ -1,0 +1,16 @@
+"0","```r
+# Form table of total profit by by region and sub.category
+# tapply function is like other apply functions but does a function [sum in this case] over an indicie [Region in this case]
+# apply functions are generally
+profit_sum <- round(rbind(
+  tapply(office[office$Region == \"Central\",]$Profit, office[office$Region == \"Central\",]$Sub.Category, sum),
+  tapply(office[office$Region == \"East\",]$Profit, office[office$Region == \"East\",]$Sub.Category, sum),
+  tapply(office[office$Region == \"South\",]$Profit, office[office$Region == \"South\",]$Sub.Category, sum),
+  tapply(office[office$Region == \"West\",]$Profit, office[office$Region == \"West\",]$Sub.Category, sum)
+  ),
+  0)
+row.names(profit_sum) <- c(\"Central\", \"East\", \"South\", \"West\")
+profit_sum
+
+
+```"

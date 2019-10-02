@@ -1,0 +1,14 @@
+"0","```r
+# Form table of medians since profit was skewed
+profit_med <- round(rbind(
+  tapply(office[office$Region == \"Central\",]$Profit, office[office$Region == \"Central\",]$Sub.Category, median),
+  tapply(office[office$Region == \"East\",]$Profit, office[office$Region == \"East\",]$Sub.Category, median),
+  tapply(office[office$Region == \"South\",]$Profit, office[office$Region == \"South\",]$Sub.Category, median),
+  tapply(office[office$Region == \"West\",]$Profit, office[office$Region == \"West\",]$Sub.Category, median)
+  ),
+  0)
+row.names(profit_med) <- c(\"Central\", \"East\", \"South\", \"West\")
+profit_med
+
+
+```"

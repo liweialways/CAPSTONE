@@ -1,0 +1,6 @@
+"0","# Clear environment of variables and functions"
+"0","rm(list = ls(all = TRUE)) "
+"0",""
+"0","# Clear environmet of packages"
+"0","if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste(""package:"", names(sessionInfo()$otherPkgs), sep=""""), detach, character.only = TRUE, unload = TRUE)"
+"0",""
