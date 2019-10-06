@@ -1,0 +1,184 @@
+---
+title: "Wei - EDA"
+author: "Wei"
+date: "10/01/2019"
+output: html_notebook
+---
+
+
+```{r include = FALSE}
+# Course: BUAN 5510
+# Purpose: EDA
+# Author: Wei Li  
+# Date: 10/01/2019
+
+```
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+
+```
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+library(tidyverse) 
+library(dplyr) # joins
+#library(janitor) # pretty cross-tabs
+library(kableExtra) # pretty html tables
+library(formattable)
+library(gridExtra)
+library(scales)
+library(pastecs)
+library(GGally)
+library(lubridate)
+```
+
+
+```{r}
+# Load 2 hotel data
+hot1 <- read.csv('../raw_data/BOOKINGS_ATLCP.csv')
+hot2 <- read.csv('../raw_data/BOOKINGS_NYCHA.csv')
+```
+
+```{r}
+# EDA only on training data 
+## Change date to date type
+hot1$stay_dt <- as.Date(hot1$stay_dt, "%m/%d/%Y")
+hot1$booking_dt <- as.Date(hot1$booking_dt, "%m/%d/%Y")
+hot2$stay_dt <- as.Date(hot2$stay_dt, "%m/%d/%Y")
+hot2$booking_dt <- as.Date(hot2$booking_dt, "%m/%d/%Y")
+
+#create field for non-numerical dow
+hot1$day_of_week <- as.factor(hot1$dow)
+hot2$day_of_week <- as.factor(hot2$dow)
+
+## Reserve last 3 weeks data as Validation Data and the prior are Training Data
+h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
+h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
+
+```
+
+##__Hotel 1__
+
+```{r}
+head(h1_train)
+```
+
+```{r}
+# number of observations in each days_prior
+h1_train %>% 
+  select(days_prior) %>% 
+  group_by(days_prior) %>% 
+  tally
+```
+
+- For each days_prior, there are 580 observations. So for this step, we don't truncate data in terms of days_prior.
+avg_bookings
+```{r}
+# number of bookings and cancels in each days_prior
+h1_train %>% 
+  select(days_prior, daily_gross_bookings, daily_cxl_bookings) %>% 
+  group_by(days_prior) %>% 
+  summarise(avg_bookings = mean(daily_gross_bookings),
+            avg_cancels = mean(daily_cxl_bookings),
+            sum_bookings = sum(daily_gross_bookings),
+            sum_cancels = sum(daily_cxl_bookings)) %>% 
+  arrange(avg_cancels)
+```
+
+- Above shows the avg and sum of bookings in terms of each days_prior. If we want to truncate, what about days_prior=24 where the avg_cancels = 0.09? In Petraru's paper, he used 16 and 22 in some graphs. So I guess we could choose a close one?
+
+```{r}
+# 1-1. Understand the patterns of cancellation rate curves. Try to see if cancellation rates are different by DOW (day of week), product types (by different levels),  month, OTB (demand volume), daily/cumulative gross bookings, daily/cumulative cancellations, price, and etc. Graphical display (plots) will be helpful to understand the patterns.
+
+# DOW
+h1_train %>% 
+  select(day_of_week, daily_cxl_bookings, daily_gross_bookings) %>% 
+  group_by(day_of_week) %>% 
+  summarise(avg_bookings = mean(daily_gross_bookings),
+            avg_cancels = mean(daily_cxl_bookings),
+            sum_bookings = sum(daily_gross_bookings),
+            sum_cancels = sum(daily_cxl_bookings)) %>%
+  arrange(day_of_week) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:3, color = "#000000")
+
+```
+
+- day_of_week 1, 5, 6, 7: lower avg_bookings and lower avg_cancels. Does this make sense? Shouldn't Monday, Friday, Saturday and Sunday be the most popular days for hotel? Why the bookings are lower than other days? 
+- group into 1567 and 234 two categories? 
+
+```{r}
+# product types
+h1_train %>% 
+  select(product_type, daily_cxl_bookings, daily_gross_bookings) %>% 
+  group_by(product_type) %>% 
+  summarise(avg_bookings = mean(daily_gross_bookings), 
+            avg_cancels = mean(daily_cxl_bookings),
+            perc_cxl = avg_cancels/avg_bookings) %>%
+  arrange(perc_cxl) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:3, color = "#000000")
+
+```
+
+- Same as your findings!
+- Opaque, fenced, other - too few observations(cancels) to use, consider exclude them?
+
+```{r}
+# month 
+h1_train$month = month(h1_train$stay_dt)
+
+h1_train %>%
+  select(month, daily_gross_bookings) %>%
+  group_by(month) %>%
+  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings)) +
+           geom_bar(stat = "identity", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by Month")
+
+```
+
+- Avg # in April is lower, only 3 months -- too short to tell, so we could try week, like below.
+
+```{r}
+# week 
+h1_train$week = week(h1_train$stay_dt)
+
+h1_train %>%
+  select(week, daily_gross_bookings) %>%
+  group_by(week) %>%
+  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  ggplot(aes(x = reorder(week, -avg_bookings), y = avg_bookings)) +
+           geom_bar(stat = "identity", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by week")
+```
+
+- Trend: going down.
+
+```{r}
+# OTB (demand volume)
+
+```
+
+```{r}
+# daily/cumulative gross bookings, daily/cumulative cancellations, price, and etc. 
+```
+
