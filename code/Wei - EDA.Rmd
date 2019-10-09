@@ -2,7 +2,9 @@
 title: "Wei - EDA"
 author: "Wei"
 date: "10/01/2019"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 
@@ -68,16 +70,6 @@ head(h1_train)
 ```
 
 ```{r}
-# number of observations in each days_prior
-h1_train %>% 
-  select(days_prior) %>% 
-  group_by(days_prior) %>% 
-  tally
-```
-
-- For each days_prior, there are 580 observations. So for this step, we don't truncate data in terms of days_prior.
-avg_bookings
-```{r}
 # number of bookings and cancels in each days_prior
 h1_train %>% 
   select(days_prior, daily_gross_bookings, daily_cxl_bookings) %>% 
@@ -90,6 +82,42 @@ h1_train %>%
 ```
 
 - Above shows the avg and sum of bookings in terms of each days_prior. If we want to truncate, what about days_prior=24 where the avg_cancels = 0.09? In Petraru's paper, he used 16 and 22 in some graphs. So I guess we could choose a close one?
+
+```{r}
+# number of cancellations in each days_prior/each product type
+h1_train %>% 
+  select(days_prior, daily_cxl_bookings) %>% 
+  group_by(days_prior) %>% 
+  summarize(num = sum(daily_cxl_bookings))
+
+h1_train %>% 
+  select(product_type, daily_cxl_bookings) %>% 
+  group_by(product_type) %>% 
+  summarize(num = sum(daily_cxl_bookings))
+```
+
+- days_prior about 25, the number of cxl is about 50
+- product_type: need to regroup, due to the few cxls in some types. Regroup method, close cxl rate --> group together. Plot the curves would help. 
+
+```{r}
+# cxl rate curve = cummulative_cxl_bookings/cummulative_gross_bookings)
+h1_train %>% 
+  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))
+
+```
+
+Possibly group:
+-group 1: Unfenced, membership marketing,
+-group 2: fenced
+-group 3: corporate, group, business travel
+-group 4: opaque
+
+-government and other are not here?
 
 ```{r}
 # 1-1. Understand the patterns of cancellation rate curves. Try to see if cancellation rates are different by DOW (day of week), product types (by different levels),  month, OTB (demand volume), daily/cumulative gross bookings, daily/cumulative cancellations, price, and etc. Graphical display (plots) will be helpful to understand the patterns.
@@ -109,8 +137,8 @@ h1_train %>%
 
 ```
 
-- day_of_week 1, 5, 6, 7: lower avg_bookings and lower avg_cancels. Does this make sense? Shouldn't Monday, Friday, Saturday and Sunday be the most popular days for hotel? Why the bookings are lower than other days? 
-- group into 1567 and 234 two categories? 
+- day_of_week 1, 6, 7: lower avg_bookings and lower avg_cancels. Does this make sense? Shouldn't Sunday, Friday, Saturday be the most popular days for hotel? Why the bookings are lower than other days? --- make sense, many group traveler are on business travel during in week days. 
+- regroup into 2345 and 167 2 groups? - Nope.
 
 ```{r}
 # product types
@@ -127,7 +155,6 @@ h1_train %>%
 
 ```
 
-- Same as your findings!
 - Opaque, fenced, other - too few observations(cancels) to use, consider exclude them?
 
 ```{r}
@@ -160,7 +187,7 @@ h1_train %>%
   select(week, daily_gross_bookings) %>%
   group_by(week) %>%
   summarise(avg_bookings = mean(daily_gross_bookings)) %>%
-  ggplot(aes(x = reorder(week, -avg_bookings), y = avg_bookings)) +
+  ggplot(aes(x = week, y = avg_bookings)) +
            geom_bar(stat = "identity", position = "dodge") +
            theme_minimal() +
            theme(axis.title = element_blank(),
