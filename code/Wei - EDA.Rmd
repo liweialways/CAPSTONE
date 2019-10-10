@@ -100,29 +100,10 @@ h1_train %>%
 - product_type: need to regroup, due to the few cxls in some types. Regroup method, close cxl rate --> group together. Plot the curves would help. 
 
 ```{r}
-# cxl rate curve = cummulative_cxl_bookings/cummulative_gross_bookings)
-h1_train %>% 
-  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
-  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
-  group_by(days_prior, product_type) %>% 
-  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
-  ggplot()+
-  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))
-
-```
-
-Possibly group:
--group 1: Unfenced, membership marketing,
--group 2: fenced
--group 3: corporate, group, business travel
--group 4: opaque
-
--government and other are not here?
-
-```{r}
 # 1-1. Understand the patterns of cancellation rate curves. Try to see if cancellation rates are different by DOW (day of week), product types (by different levels),  month, OTB (demand volume), daily/cumulative gross bookings, daily/cumulative cancellations, price, and etc. Graphical display (plots) will be helpful to understand the patterns.
 
 # DOW
+## Daily cxls
 h1_train %>% 
   select(day_of_week, daily_cxl_bookings, daily_gross_bookings) %>% 
   group_by(day_of_week) %>% 
@@ -130,82 +111,96 @@ h1_train %>%
             avg_cancels = mean(daily_cxl_bookings),
             sum_bookings = sum(daily_gross_bookings),
             sum_cancels = sum(daily_cxl_bookings)) %>%
-  arrange(day_of_week) %>%
-  kable(align = c("c", "c", "c", "c")) %>% 
-  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
-  column_spec(1:3, color = "#000000")
-
+  arrange(day_of_week)
+  
+## Cummulative cxl rate, need to exclude the records whos cummulative gross bookings=0 to avoid NaN values.
+h1_train %>% 
+  select(day_of_week, cummulative_gross_bookings, cummulative_cxl_bookings) %>% 
+  filter(cummulative_gross_bookings!=0) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(day_of_week) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate))
+## Plot cummulative cxl rate curves in terms of day_of_week
+h1_train %>% 
+  select(day_of_week, days_prior, cummulative_gross_bookings, cummulative_cxl_bookings) %>% 
+  filter(cummulative_gross_bookings!=0) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(day_of_week, days_prior) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = day_of_week))+
+  geom_dl(aes(label = day_of_week, x=days_prior, y=avg_cxl_rate, color = day_of_week), method = list(dl.combine("first.points", "last.points"), cex=0.9))
 ```
 
-- day_of_week 1, 6, 7: lower avg_bookings and lower avg_cancels. Does this make sense? Shouldn't Sunday, Friday, Saturday be the most popular days for hotel? Why the bookings are lower than other days? --- make sense, many group traveler are on business travel during in week days. 
-- regroup into 2345 and 167 2 groups? - Nope.
+- From daily data: day_of_week 1, 6, 7: lower avg_bookings and lower avg_cancels. Does this make sense? Shouldn't Sunday, Friday, Saturday be the most popular days for hotel? Why the bookings are lower than other days? --- make sense, many group traveler are on business travel during in week days. 
+- From cummulative data: day of week 1: high cummulative cxl rate, 2,6&7: low cummulative cxl rate.
+- From cummulative cxl rate curve: day of week 6 is standing out.
 
 ```{r}
 # product types
+# cxl rate curve = avg(cummulative_cxl_bookings/cummulative_gross_bookings))
+library(directlabels)
+
 h1_train %>% 
-  select(product_type, daily_cxl_bookings, daily_gross_bookings) %>% 
-  group_by(product_type) %>% 
-  summarise(avg_bookings = mean(daily_gross_bookings), 
-            avg_cancels = mean(daily_cxl_bookings),
-            perc_cxl = avg_cancels/avg_bookings) %>%
-  arrange(perc_cxl) %>%
-  kable(align = c("c", "c", "c", "c")) %>% 
-  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
-  column_spec(1:3, color = "#000000")
+  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  filter(cummulative_gross_bookings != 0) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))+
+  geom_dl(aes(label = product_type, x=days_prior, y=avg_cxl_rate, color = product_type), method = list(dl.combine("first.points", "last.points"), cex=0.5))
 
 ```
 
-- Opaque, fenced, other - too few observations(cancels) to use, consider exclude them?
+Possibly group: 
+-group 1: fenced 124, membership marketing 260	
+-group 2: group 3524, government 199, corporate 1266
+-group 3: unfenced 741, business travel agencies 130
+-group 4: Opaque 78
+-group 5: Other 22
+
+-Can we try unsupervised classification method?
+-Exclude the days_prior>24?
+
 
 ```{r}
-# month 
+# month - not much insights from the graph.
 h1_train$month = month(h1_train$stay_dt)
-
-h1_train %>%
-  select(month, daily_gross_bookings) %>%
-  group_by(month) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
-  ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings)) +
-           geom_bar(stat = "identity", position = "dodge") +
-           theme_minimal() +
-           theme(axis.title = element_blank(),
-                axis.line.y = element_blank(),
-                axis.ticks.y = element_blank(),
-                axis.text.y = element_text(size = 11, face = "bold"),
-                axis.text.x = element_text(size = 11, face = "bold")) + 
-           ggtitle("Average # of Bookings by Month")
+h1_train %>% 
+  select(month, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  filter(cummulative_gross_bookings!=0) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, month) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = month))+
+  geom_dl(aes(label = month, x=days_prior, y=avg_cxl_rate, color = month), method = list(dl.combine("first.points", "last.points"), cex=0.5))
 
 ```
 
-- Avg # in April is lower, only 3 months -- too short to tell, so we could try week, like below.
-
-```{r}
-# week 
-h1_train$week = week(h1_train$stay_dt)
-
-h1_train %>%
-  select(week, daily_gross_bookings) %>%
-  group_by(week) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
-  ggplot(aes(x = week, y = avg_bookings)) +
-           geom_bar(stat = "identity", position = "dodge") +
-           theme_minimal() +
-           theme(axis.title = element_blank(),
-                axis.line.y = element_blank(),
-                axis.ticks.y = element_blank(),
-                axis.text.y = element_text(size = 11, face = "bold"),
-                axis.text.x = element_text(size = 11, face = "bold")) + 
-           ggtitle("Average # of Bookings by week")
-```
-
-- Trend: going down.
 
 ```{r}
 # OTB (demand volume)
+h1_train %>% 
+  select(days_prior, OTB) %>% 
+  group_by(days_prior) %>% 
+  summarise(avg_otb = mean(OTB))
 
+h1_train %>% 
+  select(days_prior, product_type, OTB) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_otb = mean(OTB)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_otb, color=product_type))
 ```
+
+-avg_otb is going up as days_prior is getting closer. 
+-group's OTB is much higher.
 
 ```{r}
-# daily/cumulative gross bookings, daily/cumulative cancellations, price, and etc. 
+# Price
+
 ```
+
 
