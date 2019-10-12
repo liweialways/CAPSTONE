@@ -1,0 +1,1010 @@
+---
+title: "Hotel 1 EDA"
+author: "Caitlin Howansky"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+```
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+library(tidyverse) 
+library(dplyr) # joins
+#library(janitor) # pretty cross-tabs
+library(kableExtra) # pretty html tables
+library(formattable)
+library(gridExtra)
+library(scales)
+library(pastecs)
+library(GGally)
+library(lubridate)
+library(directlabels)
+```
+
+
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# disable scientific notation in R
+options(scipen=999)
+```
+
+```{r}
+# load the data files
+hot1 <- read_csv('BOOKINGS_ATLCP.csv')
+hot2 <- read_csv('BOOKINGS_NYCHA.csv')
+
+```
+
+##__EDA__
+
+##__Data Overview__
+```{r}
+#first look at all tables
+head(hot1)
+head(hot2)
+```
+
+```{r}
+#summaries of data
+summary(hot1)
+summary(hot2)
+```
+First look at the data shows that the data seems relatively clean with no null values. Some other things worth noting is that all data columns are not in date format. Days of week are also numerical which should be changed to factors. After looking up exact dates, day of week 1 stands for Sunday. The next values worth noting is for daily net bookings and grossings there are negative minimum values meaning that there are some days that people cancel more than book. The next thing to look into is if we can regroup product type in a more efficient way. 
+
+
+```{r}
+# change date fields to date
+hot1$stay_dt <- as.Date(hot1$stay_dt, "%m/%d/%Y")
+hot1$booking_dt <- as.Date(hot1$booking_dt, "%m/%d/%Y")
+hot2$stay_dt <- as.Date(hot2$stay_dt, "%m/%d/%Y")
+hot2$booking_dt <- as.Date(hot2$booking_dt, "%m/%d/%Y")
+
+summary(hot1)
+
+#create field for non-numerical dow
+hot1$day_of_week <- as.factor(hot1$dow)
+hot2$day_of_week <- as.factor(hot2$dow)
+```
+
+```{r}
+# Reserve last 3 weeks data as Validation Data and the prior are Training Data
+h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
+h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
+```
+
+First look at the data shows that the data seems relatively clean with no null values. Some other things worth noting is that all data columns are not in date format. Days of week are also numerical which should be changed to factors. After looking up exact dates, day of week 1 stands for Sunday. The next values worth noting is for daily net bookings and grossings there are negative minimum values meaning that there are some days that people cancel more than book. The next thing to look into is if we can regroup product type in a more efficient way. 
+
+
+
+##__Hotel 1 - ATL__
+
+##__ Grouping Methods
+```{r}
+#look into product type
+h1_train %>%
+  select(product_type,  OTB, OTB_to_be_cxl) %>%
+  group_by(product_type) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            perc_cxl = (mean(OTB_to_be_cxl)/mean(OTB))*100) %>%
+  kable(align = c("c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:4, color = "#000000")
+```
+
+Based off of this, one possible way of grouping is by the most similar percentage of OTB to be cancelled cancelations. It is evident that group has significantly higher average OTB bookings and cancellations, so this should be grouped on its own. Other has the highest percentage of cancellations followed by government while the lowest percentages is opaque and fenced. This makes sense due to the fact that opaque is usually booked last minute to make up for open rooms and fenced is non-refundable. One grouping we will try to run in our models is as follows. 
+- opaque, fenced
+- corporate, business travel agencies
+- group
+- membership, other
+- unfenced, government
+
+```{r}
+# make this a group in h1_train
+h1_train <- h1_train %>%
+      mutate(prod_group_perc = case_when(product_type == 'OPAQUE' ~ 'OP/FENC',
+                                         product_type == 'FENCED' ~ 'OP/FENC',
+                                         product_type == 'CORPORATE' ~ 'CORP/BUS',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'CORP/BUS',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP' ~ 'MEM/OTHER',
+                                         product_type == 'OTHER' ~ 'MEM/OTHER',
+                                         product_type == 'UNFENCED' ~ 'GOV/UNFENC',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/UNFENC'))
+```
+
+
+To further understand the groups, we will look into the behavior of the groups and see if there is a better way to group them. 
+
+```{r}
+#above by day of week
+h1_train %>%
+  select(product_type, day_of_week, OTB, OTB_to_be_cxl) %>%
+  group_by(product_type, day_of_week) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl)) %>%
+  arrange(desc(avg_cancels)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:4, color = "#000000")
+```
+
+All of the highest OTB to be cancelled is for Group. The lowest cancellation for Group is on Sunday which is at 14 and the next highest average cancellation is corporate at 4. 
+
+```{r}
+#look at bookings by day of week and product type
+
+h1_train %>%
+  select(day_of_week, product_type, OTB) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
+  ggplot(aes(x = reorder(day_of_week, -avg_bookings), y = avg_bookings, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_blank(),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by DOW and Product Type")
+```
+
+The most obvious thing from this graph is the number of bookings group has compared to all other product types. The day of the week with the least amount of bookings is Sunday. Corporate is the only one that Sunday is not their least common stay date. Unfenced remains relatively stable across all days. Business travel agencies and other have the least amount of bookings. These should be grouped with similar behaving product types. 
+
+
+```{r}
+#above by cancellations
+h1_train %>%
+  select(day_of_week, product_type, OTB_to_be_cxl) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_cxl = mean(OTB_to_be_cxl)) %>%
+  ggplot(aes(x = reorder(day_of_week, -avg_cxl), y = avg_cxl, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of CXLs by DOW and Product Type")
+```
+
+Looking at the product types with cancellations in mind, the relations are very similar; however, it seems as though unfenced has a very high rate of cancellations. This makes sense due to the fact that these rooms are refundable so the consequences for cancelling are not high. Sundays are also the lowest day for cancellations and monday is the highest. Another griping of product type based off of behavior that we will try is as follows.
+- Group
+- Corporate
+- Unfenced
+- Other, Opaque, Fenced
+- Business Travel Agencies, Government, Membership Marketing
+
+```{r}
+#Create this group
+
+h1_train <- h1_train %>%
+      mutate(prod_group_behav = case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
+                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
+                                         product_type == 'CORPORATE' ~ 'CORPORATE',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'GOV/BUS/MEM',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'GOV/BUS/MEM',
+                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
+                                         product_type == 'UNFENCED' ~ 'UNFENCED',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/BUS/MEM'))
+```
+
+
+To further look into grouping product type, we will look at the cancelation curve. 
+
+```{r}
+
+h1_train %>% 
+  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  filter(cummulative_gross_bookings != 0) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))+
+  geom_dl(aes(label = product_type, x=days_prior, y=avg_cxl_rate, color = product_type), method = list(dl.combine("first.points", "last.points"), cex=0.5))
+
+```
+
+It seems as though we should truncate the days prior to 30 as cancellations rates change significantly after this point. How many observations does each days prior have? What would happen to this graph if we tried this?
+
+```{r}
+h1_train %>% 
+  select(days_prior, daily_cxl_bookings) %>% 
+  group_by(days_prior) %>% 
+  summarize(num = sum(daily_cxl_bookings)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:2, color = "#000000")
+```
+- The amount of observations for each days prior goes down significantly after day 32. We will truncate the days prior here. 
+
+```{r}
+h1_train %>% 
+  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  filter(cummulative_gross_bookings != 0) %>% 
+  filter(days_prior <= 32) %>%
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))+
+  geom_dl(aes(label = product_type, x=days_prior, y=avg_cxl_rate, color = product_type), method = list(dl.combine("first.points", "last.points"), cex=0.5))
+```
+
+Based off of cancellation rates we can try to group similar groups together keeping in mind the number of cancellations each group has. 
+
+```{r}
+# number of cancellations in each product type
+
+h1_train %>% 
+  select(product_type, daily_cxl_bookings) %>% 
+  group_by(product_type) %>% 
+  summarize(num = sum(daily_cxl_bookings)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:2, color = "#000000")
+```
+Since other and opaque has such a small amount of observations, these should definitely be joined with other product types. Another grouping we will consider is as follows. 
+-Other, government, business travel agencies, unfenced
+-Opaque, Membership Marketing, fenced
+-corporate, group
+
+```{r}
+#Create this group
+
+h1_train <- h1_train %>%
+      mutate(prod_group_cxl_rate = case_when(product_type == 'OPAQUE' ~ 'OP/FENC/MEM',
+                                         product_type == 'FENCED' ~ 'OP/FENC/MEM',
+                                         product_type == 'CORPORATE' ~ 'CORP/GROUP',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'GOV/BUS/UNF/OTH',
+                                         product_type == 'GROUP' ~ 'CORP/GROUP',
+                                         product_type == 'MEMBERSHIP' ~ 'OP/FENC/MEM',
+                                         product_type == 'OTHER' ~ 'GOV/BUS/UNF/OTH',
+                                         product_type == 'UNFENCED' ~ 'GOV/BUS/UNF/OTH',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/BUS/UNF/OTH'))
+#truncate days prior to 32
+
+h1_train <- h1_train %>%
+            filter(days_prior <= 32)
+```
+
+
+##__Further Analysis__
+
+```{r}
+#revenue by day of week
+
+h1_train %>%
+  select(day_of_week, product_type, OTB_rev) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_rev = mean(OTB_rev)) %>%
+  ggplot(aes(x = reorder(day_of_week, -avg_rev), y = avg_rev, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Avg Revenues by DOW and product type")
+```
+Sunday has the lowest on the book revenue. Since it is also the lowest dtay date, this makes sense, especially since the product type group has significantly less bookings for Sunday. It is evident that the ATL Hotel is focused on businesses and corporate events which is why group and corporate have the highest revenues. This is alsy why the weekend has less people staying at the hotel. 
+
+```{r}
+#look into days prior with revenue and pricing 
+
+h1_train %>%
+  select(OTB, OTB_to_be_cxl, OTB_rev, days_prior) %>%
+  group_by(days_prior) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_otb_rev = mean(OTB_rev),
+            avg_price = mean(OTB_rev)/ mean(OTB)) %>%
+  arrange(desc(avg_otb_rev)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:4, color = "#000000")
+```
+A lot of bookings happen the day of however the on the book to be cancelled is 0 for the day of. 
+Revenue looks to follow a linear relationship with days prior. The average price is between 107 and 112 with it increasing as it gets closer to the day. 
+
+```{r}
+#look into price by product type
+h1_train %>%
+  select(product_type,  OTB, OTB_to_be_cxl, OTB_rev) %>%
+  group_by(product_type) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_rev = mean(OTB_rev),
+             avg_price = mean(OTB_rev)/ mean(OTB)) %>%
+  kable(align = c("c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:3, color = "#000000")
+```
+
+Why would other be so low? I am suprised at the close price between unfenced and fenced. It is interesting that business travel agencies has the highest average price. It does make sense that group has a lower price as they are usually booking big chunks. Price should be included as a variable in future modeling 
+
+```{r}
+#add price to h1_train
+
+h1_train <-  h1_train %>%
+  mutate(price = OTB_rev/OTB)
+```
+
+
+
+```{r}
+#net revenue and days prior
+
+h1_train %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
+  group_by(days_prior) %>%
+  summarise(avg_net_rev = mean(OTB_rev)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_net_rev, color = "red")) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("OTB Revenue by Days Prior")
+
+```
+
+
+```{r}
+#graphical representation of above
+
+h1_train %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
+  group_by(days_prior) %>%
+  summarise(avg_net_rev = mean(OTB_rev),
+            avg_bookings = mean(OTB),
+            avg_cxl = mean(OTB_to_be_cxl)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings), color = "red") +
+  geom_line(aes(x = days_prior, y = avg_cxl), color = "blue") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Bookings & Cancellations by Days Prior")
+```
+
+While OTB bookings see a steady incease in cumulative bookings as the days get closer to the stay date, cancellations remeain fairly steady around 5 cancellations a day. 
+
+```{r}
+h1_train %>%
+  select(days_prior, cummulative_gross_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(cummulative_gross_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings,  color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Cumm Bookings by Product Type and Days Prior")
+```
+
+You can see a steeper increase around prior day zero on most product types. 
+
+
+```{r}
+#How does month affect bookings and cancellations
+h1_train$month = month(h1_train$stay_dt)
+
+h1_train %>%
+  select(month, product_type, OTB) %>%
+  group_by(month, product_type) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
+  ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by Month and Product Type")
+
+h1_train %>%
+  select(month, product_type, OTB_to_be_cxl) %>%
+  group_by(month, product_type) %>%
+  summarise(avg_bookings = mean(OTB_to_be_cxl)) %>%
+  ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by Month and Product Type")
+```
+April has a much lower average of bookings and cancellations when compared to February and March. March has the highest bookings and cancellations. This could be a good variable to look into 
+
+
+##__Outliers__
+
+```{r}
+h1_train %>%
+  select(days_prior, daily_gross_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings,  color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Bookings by Product Tpe and Days Prior")
+```
+
+To look for outliers, I am using daily gross bookings to see if you can see any quick increases. It looks as though there is a big spike in group around day 23. It also seems as though there are just big increases on day of bookings. If these are outliers, we may not want to get rid of them since it looks like a common trend is a spike in day of bookings. 
+
+```{r}
+#looking into outliers
+group_outlier <- h1_train %>%
+                filter(product_type == 'GROUP')
+
+group_outlier <- boxplot(group_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'GROUP') %>%
+  filter(daily_gross_bookings > 300)
+
+
+corp_outlier <- h1_train %>%
+                filter(product_type == 'CORPORATE')
+
+corp_outlier <- boxplot(corp_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'CORPORATE') %>%
+  filter(daily_gross_bookings > 20)
+
+gov_outlier <- h1_train %>%
+                filter(product_type == 'GOVERNMENT')
+
+gov_outlier <- boxplot(gov_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'GOVERNMENT') %>%
+  filter(daily_gross_bookings > 10)
+
+unf_outlier <- h1_train %>%
+                filter(product_type == 'UNFENCED')
+
+unf_outlier <- boxplot(unf_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'UNFENCED') %>%
+  filter(daily_gross_bookings > 30)
+```
+ - GROUP    
+    - 289 outliers for group 
+    - cut out greater than 400?
+    - there are four greater than 400 at days prior 22, 23, 24,25
+    - this is the bump we are seeing in the above graph
+    - next lowest one is 290
+
+- CORPORATE 
+    - 193 outliers for corporate 
+    - cut out greater than 35?
+    - four greater than 35 at 0 days prior 
+    - next lowest one is 29
+    - All of these are at day 0 except days prior 2 and 4
+
+- GOVERNMENT    
+    - 264 outliers for gov out of 4148 
+    - four rows greater than 10 at 16, 23, 25, 23
+
+- UNFENCED
+    - 166 outliers
+    - cut out greater than 30?
+    - Only one above 30 at 41 on days prior 7
+    
+```{r}
+#look into cancellations
+h1_train %>%
+  select(days_prior, daily_cxl_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(daily_cxl_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings, fill = product_type, color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Cancellations by Product Type and Days Prior")
+```
+There seems to be no big bumps except for the day of. Since we are dealing with daily gross cancellations, it seems as though there are a lot of people that cancel the day of. We should include these observations since this is a common trend. 
+
+##__Correlations__
+```{r}
+#look into correlations to prepare for linear regressions
+h1_train %>%
+  select(dow, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings, cummulative_gross_rev, OTB, OTB_rev, OTB_to_be_cxl, month, price)%>%
+  cor()
+
+```
+
+- Cummulative cancellations and cummulative gross bookings have a very high correlation along with revenue
+- Month does not seem to have any significant correlations
+
+- Run linear regressions to test for more correlations ***************************
+
+##__Hotel 2 - NY__
+
+##__Grouping Methods __
+
+```{r}
+#look into product type
+h2_train %>%
+  select(product_type,  OTB, OTB_to_be_cxl) %>%
+  group_by(product_type) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+             perc_cxl = (mean(OTB_to_be_cxl)/mean(OTB))*100) %>%
+  kable(align = c("c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:3, color = "#000000")
+```
+This is very different from the ATL Hotel as the percentage of cancellations is less spread out. It is evident that the groupings for product type will be different from the first hotel. There are also different product types that could affect pricing differently.  One group based off of cancellations is as follows. 
+- Fenced, opaque, other
+- tactical marketing, group, corporate
+- business travel agencies, membership marketing, unfenced, wholesale
+- government
+
+```{r}
+#make these groups
+h2_train <- h2_train %>%
+      mutate(prod_group_perc = case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
+                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
+                                         product_type == 'CORPORATE' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'GROUP' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'TACTICAL MARKETING' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
+                                         product_type == 'UNFENCED' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
+                                         product_type == 'WHOLESALE' ~ 'UNF/WHOLE/MEM/BUS'))
+```
+
+
+```{r}
+#above by day of week
+h2_train %>%
+  select(product_type, day_of_week, OTB, OTB_to_be_cxl) %>%
+  group_by(product_type, day_of_week) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl)) %>%
+  arrange(desc(avg_bookings)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:4, color = "#000000")
+```
+ 
+ Opaque has the highest number of groupings on Sunday and Saturday. This could mean that the the NY hotel has less demand for Sundays so they sell last minute on this day. The middle of the week for group has the next highest average bookings. 
+ 
+```{r}
+#bookings by day of week and product type
+
+h2_train %>%
+  select(day_of_week, product_type, OTB) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
+  ggplot(aes(x = reorder(day_of_week, -avg_bookings), y = avg_bookings, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by DOW and Product Type")
+```
+ Again, this hotel is very different from ATL. Opaque has a lot more bookings, especially on fridays and saturdays. Other, government, and tactial marketing are very small categories and should be grouped with other product types. It seems like this hotel houses a lot of business since corporate and group are so high and they dont have as many staying on fridays and saturday nights.
+ 
+ 
+```{r}
+#above by cancellations
+h2_train %>%
+  select(day_of_week, product_type, OTB_to_be_cxl) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_cxl = mean(OTB_to_be_cxl)) %>%
+  ggplot(aes(x = reorder(day_of_week, -avg_cxl), y = avg_cxl, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of CXLs by DOW and Product Type")
+```
+ 
+ Unfenced has by far the highest number of cancellations followed by group then corporate. Look into cancelation curve to create another grouping of product types. 
+ 
+```{r}
+h2_train %>% 
+  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  filter(cummulative_gross_bookings != 0) %>% 
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))+
+  geom_dl(aes(label = product_type, x=days_prior, y=avg_cxl_rate, color = product_type), method = list(dl.combine("first.points", "last.points"), cex=0.5))
+```
+
+Again, it seems as though truncating the days prior is a good idea for this hotel again. Let's first look into that. 
+ 
+```{r}
+h2_train %>% 
+  select(days_prior, daily_cxl_bookings) %>% 
+  group_by(days_prior) %>% 
+  summarize(num = sum(daily_cxl_bookings)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:2, color = "#000000")
+```
+- The amount of observations for each days prior goes down significantly after day 31. We will truncate the days prior here. 
+
+```{r}
+h2_train %>% 
+  select(product_type, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings) %>% 
+  filter(cummulative_gross_bookings != 0) %>% 
+  filter(days_prior <= 31) %>%
+  mutate(cxl_rate = cummulative_cxl_bookings/cummulative_gross_bookings) %>% 
+  group_by(days_prior, product_type) %>% 
+  summarise(avg_cxl_rate = mean(cxl_rate)) %>% 
+  ggplot()+
+  geom_line(aes(x=days_prior, y=avg_cxl_rate, color = product_type))+
+  geom_dl(aes(label = product_type, x=days_prior, y=avg_cxl_rate, color = product_type), method = list(dl.combine("first.points", "last.points"), cex=0.5))
+```
+A lot of very similar curves.
+Another grouping of product type is as follows. 
+- Government
+- wholesale, coporate, membership marketing, group, unfenced
+- tactical marketing, other 
+- fenced, opaque
+- business trabel agencies 
+
+```{r}
+# number of cancellations in each product type
+
+h2_train %>% 
+  select(product_type, daily_cxl_bookings) %>% 
+  group_by(product_type) %>% 
+  summarize(num = sum(daily_cxl_bookings)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:2, color = "#000000")
+```
+
+
+```{r}
+#make this a group
+h2_train <- h2_train %>%
+      mutate(prod_group_behav = case_when(product_type == 'OPAQUE' ~ 'OP/FENC',
+                                         product_type == 'FENCED' ~ 'OP/FENC',
+                                         product_type == 'CORPORATE' ~ 'UNF/WHOLE/MEM/GROU/CORP',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'BUSINESS TRAVEL AGENCIES',
+                                         product_type == 'GROUP' ~ 'UNF/WHOLE/MEM/GROU/CORP',
+                                         product_type == 'TACTICAL MARKETING' ~ 'OTH/TACT',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'UNF/WHOLE/MEM/GROU/CORP',
+                                         product_type == 'OTHER' ~ 'OTH/TACT',
+                                         product_type == 'UNFENCED' ~ 'UNF/WHOLE/MEM/GROU/CORP',
+                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
+                                         product_type == 'WHOLESALE' ~ 'UNF/WHOLE/MEM/GROU/CORP'))
+
+#truncate days prior to 32
+
+h2_train <- h2_train %>%
+            filter(days_prior <= 31)
+```
+
+
+
+##__Further Analysis__
+
+```{r}
+#revenue by day of week
+
+h2_train %>%
+  select(day_of_week, product_type, OTB_rev) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_rev = mean(OTB_rev)) %>%
+  ggplot(aes(x = reorder(day_of_week, -avg_rev), y = avg_rev, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Avg Revenues by DOW and product type")
+```
+
+Group is very low on friday, saturday, and sunday but hotel does a good job by supplemeniting this with opaque. It would be interesting to see this price average. 
+
+```{r}
+#look into days of week  with revenue and pricing 
+
+h1_train %>%
+  select(OTB, OTB_to_be_cxl, OTB_rev, day_of_week) %>%
+  group_by(day_of_week) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_otb_rev = mean(OTB_rev),
+            avg_price = mean(OTB_rev)/ mean(OTB)) %>%
+  arrange(desc(avg_otb_rev)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:4, color = "#000000")
+```
+
+Average prices are relatively the same for all days of week. Is this different by product type?
+
+```{r}
+
+h1_train %>%
+  select(OTB, OTB_to_be_cxl, OTB_rev, day_of_week, product_type) %>%
+  group_by(day_of_week, product_type) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_otb_rev = mean(OTB_rev),
+            avg_price = mean(OTB_rev)/ mean(OTB)) %>%
+  arrange(desc(avg_price)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:6, color = "#000000")
+```
+
+The cheapest prices are other (which there are only 5 cancellations on) at a near zero price. Other than that opaque is the cheapest ranging between 80 and 57. 57 is on Satuday followed by Sunday then Friday. This would explain for the increase in these types of purchases on the weekends. 
+
+```{r}
+#look into days prior with revenue and pricing 
+
+h1_train %>%
+  select(OTB, OTB_to_be_cxl, OTB_rev, days_prior) %>%
+  group_by(days_prior) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_otb_rev = mean(OTB_rev),
+            avg_price = mean(OTB_rev)/ mean(OTB)) %>%
+  arrange(desc(avg_otb_rev)) %>%
+  kable(align = c("c", "c", "c", "c")) %>% 
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
+  column_spec(1:5, color = "#000000")
+```
+
+Days prior again follows a relatively linear relationship. 
+
+```{r}
+#add price to h2_train
+
+h2_train <-  h2_train %>%
+  mutate(price = OTB_rev/OTB)
+```
+
+```{r}
+h2_train %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
+  group_by(days_prior) %>%
+  summarise(avg_net_rev = mean(OTB_rev),
+            avg_bookings = mean(OTB),
+            avg_cxl = mean(OTB_to_be_cxl)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings), color = "red") +
+  geom_line(aes(x = days_prior, y = avg_cxl), color = "blue") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Bookings & Cancellations by Days Prior")
+```
+This has a very similar curve to it that Hotel 1 has. 
+
+
+```{r}
+h2_train %>%
+  select(days_prior, cummulative_gross_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(cummulative_gross_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings,  color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Cumm Bookings by Product Type and Days Prior")
+```
+
+While some of the groups show an inverse relationship with cummulative bookings and days prior, many show a very steady cummulative bookings. This means that there are not many last minute bookings. 
+
+```{r}
+#How does month affect bookings and cancellations
+h2_train$month = month(h2_train$stay_dt)
+
+h2_train %>%
+  select(month, product_type, OTB) %>%
+  group_by(month, product_type) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
+  ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by Month and Product Type")
+
+h2_train %>%
+  select(month, product_type, OTB_to_be_cxl) %>%
+  group_by(month, product_type) %>%
+  summarise(avg_bookings = mean(OTB_to_be_cxl)) %>%
+  ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings, fill = product_type)) +
+           geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Average # of Bookings by Month and Product Type")
+```
+
+This is very different from hotel 1. April actually has the most stay dates while february has the least. However, this is not as steep of a decline as seen in hotel 1. 
+
+
+##__Outliers__
+
+```{r}
+h2_train %>%
+  select(days_prior, daily_gross_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings,  color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Bookings by Product Type and Days Prior")
+```
+
+There is a huge bump in group about 21 days out, should this be included?
+
+
+```{r}
+#looking into outliers
+group_outlier <- h2_train %>%
+                filter(product_type == 'GROUP')
+
+group_outlier <- boxplot(group_outlier$daily_gross_bookings)$out
+
+h2_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'GROUP') %>%
+  filter(daily_gross_bookings > 200)
+
+
+corp_outlier <- h2_train %>%
+                filter(product_type == 'CORPORATE')
+
+corp_outlier <- boxplot(corp_outlier$daily_gross_bookings)$out
+
+h2_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'CORPORATE') %>%
+  filter(daily_gross_bookings > 50)
+
+gov_outlier <- h2_train %>%
+                filter(product_type == 'GOVERNMENT')
+
+gov_outlier <- boxplot(gov_outlier$daily_gross_bookings)$out
+
+h2_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'GOVERNMENT') %>%
+  filter(daily_gross_bookings > 10)
+
+unf_outlier <- h2_train %>%
+                filter(product_type == 'UNFENCED')
+
+unf_outlier <- boxplot(unf_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'UNFENCED') %>%
+  filter(daily_gross_bookings > 30)
+```
+ - GROUP    
+    - 323 outliers for group 
+    - cut out greater than 200?
+    - there are four greater than 400 at days prior 21, 22, 23, 24
+    - this is the bump we are seeing in the above graph
+
+- CORPORATE 
+    - 94 outliers for corporate 
+    - cut out greater than 50?
+    - only one greater than 50 at days prior = 5
+
+- GOVERNMENT 
+    - 128 outliers
+    - cut out greater than 10
+    - only 3 at days prior 14, 23, 24
+    
+- look at others?
+    
+```{r}
+#look into cancellations
+h2_train %>%
+  select(days_prior, daily_cxl_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(daily_cxl_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings, fill = product_type, color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Cancellations by Product Type and Days Prior")
+```
+- seems to be similar bumps - look further into this?
+
+
+##__Correlations__
+```{r}
+#look into correlations to prepare for linear regressions
+h2_train %>%
+  select(dow, days_prior, cummulative_cxl_bookings, cummulative_gross_bookings, cummulative_gross_rev, OTB, OTB_rev, OTB_to_be_cxl, month, price)%>%
+  cor()
+
+```
+
+
+- why is price NA look into this?
+- Run linear regressions to test for more correlations ***************************

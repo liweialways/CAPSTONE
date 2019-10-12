@@ -97,29 +97,33 @@ h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
 ```{r}
 #look into product type
 h1_train %>%
-  select(product_type,  daily_gross_bookings, daily_cxl_bookings) %>%
+  select(product_type,  OTB, OTB_to_be_cxl) %>%
   group_by(product_type) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings),
-            avg_cancels = mean(daily_cxl_bookings),
-            perc_cxl = (mean(daily_cxl_bookings)/mean(daily_gross_bookings))*100) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            perc_cxl = (mean(OTB_to_be_cxl)/mean(OTB))*100) %>%
   kable(align = c("c", "c", "c")) %>% 
   kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
   column_spec(1:4, color = "#000000")
 ```
-- group has a significantly higher average daily bookings and cancellations
+- group has a significantly higher average otb bookings and cancellations
 - corporate is the second highest for both avg bookings and cancels
 - fenced product type seems to help decrease the number of cancellations 
 - highest percentage of cancellations is other then government 
 - lowest percentageis opaque and fenced
 - group by percentage calcs?
+      - (opaque, fenced), (corporate,business travel agencies), group, (membership, other), (unfenced,             government)
+
+
+
 
 ```{r}
 #above by day of week
 h1_train %>%
-  select(product_type, day_of_week, daily_gross_bookings, daily_cxl_bookings) %>%
+  select(product_type, day_of_week, OTB, OTB_to_be_cxl) %>%
   group_by(product_type, day_of_week) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings),
-            avg_cancels = mean(daily_cxl_bookings)) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl)) %>%
   arrange(day_of_week) %>%
   kable(align = c("c", "c", "c", "c")) %>% 
   kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
@@ -131,9 +135,9 @@ h1_train %>%
 #look at bookings by day of week and product type
 
 h1_train %>%
-  select(day_of_week, product_type, daily_gross_bookings) %>%
+  select(day_of_week, product_type, OTB) %>%
   group_by(day_of_week, product_type) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
   ggplot(aes(x = reorder(day_of_week, -avg_bookings), y = avg_bookings, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -144,7 +148,7 @@ h1_train %>%
                 axis.text.x = element_text(size = 11, face = "bold")) + 
            ggtitle("Average # of Bookings by DOW and Product Type")
 ```
-- dow 1 is lowest for all but business travel agencies
+- dow 1 is lowest for all but corporate
 - group and corporate have a very different weekly pattern (group separately)
 - other accounts for a very small portion 
 - business travel angencies are also very low (lowest on friday and saturday)
@@ -153,9 +157,9 @@ h1_train %>%
 ```{r}
 #above by cancellations
 h1_train %>%
-  select(day_of_week, product_type, daily_cxl_bookings) %>%
+  select(day_of_week, product_type, OTB_to_be_cxl) %>%
   group_by(day_of_week, product_type) %>%
-  summarise(avg_cxl = mean(daily_cxl_bookings)) %>%
+  summarise(avg_cxl = mean(OTB_to_be_cxl)) %>%
   ggplot(aes(x = reorder(day_of_week, -avg_cxl), y = avg_cxl, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -167,7 +171,7 @@ h1_train %>%
            ggtitle("Average # of CXLs by DOW and Product Type")
 ```
 
-- Groupings I'm thinking about: Group, Corporate, unfenced, (other, opaque, fenced), (bus, gov, mem) totalling 5 goups 
+- Another grouping possibility I'm thinking about: Group, Corporate, unfenced, (other, opaque, fenced), (bus, gov, mem) totalling 5 goups 
 
 - day 6 sees most cancellations and day 1 sees least
 
@@ -175,9 +179,9 @@ h1_train %>%
 #revenue by day of week
 
 h1_train %>%
-  select(day_of_week, product_type, daily_gross_rev) %>%
+  select(day_of_week, product_type, OTB_rev) %>%
   group_by(day_of_week, product_type) %>%
-  summarise(avg_rev = mean(daily_gross_rev)) %>%
+  summarise(avg_rev = mean(OTB_rev)) %>%
   ggplot(aes(x = reorder(day_of_week, -avg_rev), y = avg_rev, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -193,29 +197,30 @@ h1_train %>%
 #look into days prior 
 
 h1_train %>%
-  select(daily_gross_bookings, daily_cxl_bookings, daily_net_rev, days_prior) %>%
+  select(OTB, OTB_to_be_cxl, OTB_rev, days_prior) %>%
   group_by(days_prior) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings),
-            avg_cancels = mean(daily_cxl_bookings),
-            avg_net_rev = mean(daily_net_rev)) %>%
-  arrange(desc(avg_net_rev)) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_otb_rev = mean(OTB_rev)) %>%
+  arrange(desc(avg_otb_rev)) %>%
   kable(align = c("c", "c", "c", "c")) %>% 
   kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
   column_spec(1:4, color = "#000000")
 ```
 
-- a lot of bookings and cancellations happen the day of. More bookings than cancellations creating higher net revenues
+- a lot of bookings  happen the day of. More bookings than cancellations creating higher net revenues
 - highest net revenues are either very close to the day of staying or around 20 days out
+- truncate between days 24 and 30 
 
 ```{r}
 #graphical representation of above
 
 h1_train %>%
-  select(days_prior, daily_gross_bookings, daily_cxl_bookings, daily_net_rev) %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
   group_by(days_prior) %>%
-  summarise(avg_net_rev = mean(daily_net_rev),
-            avg_bookings = mean(daily_gross_bookings),
-            avg_cxl = mean(daily_cxl_bookings)) %>%
+  summarise(avg_net_rev = mean(OTB_rev),
+            avg_bookings = mean(OTB),
+            avg_cxl = mean(OTB_to_be_cxl)) %>%
   ggplot() +
   geom_line(aes(x = days_prior, y = avg_bookings), color = "red") +
   geom_line(aes(x = days_prior, y = avg_cxl), color = "blue") +
@@ -230,13 +235,159 @@ h1_train %>%
 
 - In the article we read, we read that cancellations are like a boat structure meaning that there are more cancellations and bookings awhile before and right before. If this is the case, the other side of the boat would be many more days out than 60 
 
+
+```{r}
+h1_train %>%
+  select(days_prior, cummulative_gross_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(cummulative_gross_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings,  color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Cumm Bookings by Product Type and Days Prior")
+```
+
+- no big bumps in cummulative gross bookings - following a logical inverse relationship
+
+- Are there any outliers here?
+- using daily gross bookings to see if there is a huge spike in demand
+
+```{r}
+h1_train %>%
+  select(days_prior, daily_gross_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings,  color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Bookings by Product Tpe and Days Prior")
+```
+- group has huge spike around day 22 - outlier?
+- group has big decrease around day 11
+
+
+```{r}
+#looking into outliers
+group_outlier <- h1_train %>%
+                filter(product_type == 'GROUP')
+
+group_outlier <- boxplot(group_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'GROUP') %>%
+  filter(daily_gross_bookings > 200)
+
+
+corp_outlier <- h1_train %>%
+                filter(product_type == 'CORPORATE')
+
+corp_outlier <- boxplot(corp_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'CORPORATE') %>%
+  filter(daily_gross_bookings > 20)
+
+gov_outlier <- h1_train %>%
+                filter(product_type == 'GOVERNMENT')
+
+gov_outlier <- boxplot(gov_outlier$daily_gross_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_gross_bookings) %>%
+  filter(product_type == 'GOVERNMENT') %>%
+  filter(daily_gross_bookings > 10)
+```
+- 451 outliers for group out of 4148 
+    - cut out greater than 400?
+    - there are four greater than 400 at days prior 22, 23, 24,25
+    - next lowest one is 290
+
+- 421 outliers for corporate 
+    - cut out greater than 35?
+    - four greater than 35 at 0 days prior 
+    - next lowest one is 29
+    
+- 377 outliers for gov out of 4148 
+    - four rows greater than 10 at 16, 23, 25, 23
+    
+
+    
+    
+- what about cancellations?
+
+```{r}
+group_outlier <- h1_train %>%
+                filter(product_type == 'GROUP')
+
+group_outlier <- boxplot(group_outlier$daily_cxl_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_cxl_bookings) %>%
+  filter(product_type == 'GROUP') %>%
+  filter(daily_cxl_bookings > 40)
+
+
+corp_outlier <- h1_train %>%
+                filter(product_type == 'CORPORATE')
+
+corp_outlier <- boxplot(corp_outlier$daily_cxl_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_cxl_bookings) %>%
+  filter(product_type == 'CORPORATE') %>%
+  filter(daily_cxl_bookings > 20)
+
+gov_outlier <- h1_train %>%
+                filter(product_type == 'GOVERNMENT')
+
+gov_outlier <- boxplot(gov_outlier$daily_cxl_bookings)$out
+
+h1_train %>%
+  select(product_type, days_prior, daily_cxl_bookings) %>%
+  filter(product_type == 'GOVERNMENT') %>%
+  filter(daily_cxl_bookings > 10)
+```
+
+
+```{r}
+h1_train %>%
+  select(days_prior, daily_cxl_bookings, product_type) %>%
+  group_by(days_prior, product_type) %>%
+  summarise(avg_bookings = mean(daily_cxl_bookings)) %>%
+  ggplot() +
+  geom_line(aes(x = days_prior, y = avg_bookings, fill = product_type, color = product_type)) +
+           theme_minimal() +
+           theme(axis.title = element_blank(),
+                axis.line.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.text.y = element_text(size = 11, face = "bold"),
+                axis.text.x = element_text(size = 11, face = "bold")) + 
+           ggtitle("Cancellations by Product Tpe and Days Prior")
+```
+- no huge spikes in cancellations 
+
+
+
+
 ```{r}
 #net revenue and days prior
 
 h1_train %>%
-  select(days_prior, daily_gross_bookings, daily_cxl_bookings, daily_net_rev) %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
   group_by(days_prior) %>%
-  summarise(avg_net_rev = mean(daily_net_rev)) %>%
+  summarise(avg_net_rev = mean(OTB_rev)) %>%
   ggplot() +
   geom_line(aes(x = days_prior, y = avg_net_rev, color = "red")) +
            theme_minimal() +
@@ -245,7 +396,7 @@ h1_train %>%
                 axis.ticks.y = element_blank(),
                 axis.text.y = element_text(size = 11, face = "bold"),
                 axis.text.x = element_text(size = 11, face = "bold")) + 
-           ggtitle("Bookings & Cancellations by Days Prior")
+           ggtitle("OTB Revenue by Days Prior")
 
 ```
  - net revenue has same bumps as bookings since the cancellation line is much smoother
@@ -257,9 +408,9 @@ h1_train %>%
 h1_train$month = month(h1_train$stay_dt)
 
 h1_train %>%
-  select(month, product_type, daily_gross_bookings) %>%
+  select(month, product_type, OTB) %>%
   group_by(month, product_type) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
   ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -283,11 +434,11 @@ h1_train %>%
 ```{r}
 #look into product type
 h2_train %>%
-  select(product_type,  daily_gross_bookings, daily_cxl_bookings) %>%
+  select(product_type,  OTB, OTB_to_be_cxl) %>%
   group_by(product_type) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings),
-            avg_cancels = mean(daily_cxl_bookings),
-             perc_cxl = (mean(daily_cxl_bookings)/mean(daily_gross_bookings))*100) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+             perc_cxl = (mean(OTB_to_be_cxl)/mean(OTB))*100) %>%
   kable(align = c("c", "c", "c")) %>% 
   kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
   column_spec(1:3, color = "#000000")
@@ -303,10 +454,10 @@ h2_train %>%
 ```{r}
 #above by day of week
 h2_train %>%
-  select(product_type, day_of_week, daily_gross_bookings, daily_cxl_bookings) %>%
+  select(product_type, day_of_week, OTB, OTB_to_be_cxl) %>%
   group_by(product_type, day_of_week) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings),
-            avg_cancels = mean(daily_cxl_bookings)) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl)) %>%
   arrange(day_of_week) %>%
   kable(align = c("c", "c", "c", "c")) %>% 
   kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
@@ -317,9 +468,9 @@ h2_train %>%
 #bookings by day of week and product type
 
 h2_train %>%
-  select(day_of_week, product_type, daily_gross_bookings) %>%
+  select(day_of_week, product_type, OTB) %>%
   group_by(day_of_week, product_type) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
   ggplot(aes(x = reorder(day_of_week, -avg_bookings), y = avg_bookings, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -339,9 +490,9 @@ h2_train %>%
 ```{r}
 #above by cancellations
 h2_train %>%
-  select(day_of_week, product_type, daily_cxl_bookings) %>%
+  select(day_of_week, product_type, OTB_to_be_cxl) %>%
   group_by(day_of_week, product_type) %>%
-  summarise(avg_cxl = mean(daily_cxl_bookings)) %>%
+  summarise(avg_cxl = mean(OTB_to_be_cxl)) %>%
   ggplot(aes(x = reorder(day_of_week, -avg_cxl), y = avg_cxl, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -360,9 +511,9 @@ h2_train %>%
 #revenue by day of week
 
 h2_train %>%
-  select(day_of_week, product_type, daily_gross_rev) %>%
+  select(day_of_week, product_type, OTB_rev) %>%
   group_by(day_of_week, product_type) %>%
-  summarise(avg_rev = mean(daily_gross_rev)) %>%
+  summarise(avg_rev = mean(OTB_rev)) %>%
   ggplot(aes(x = reorder(day_of_week, -avg_rev), y = avg_rev, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
@@ -375,16 +526,18 @@ h2_train %>%
 ```
 -sunday has lowest revenues
 
+########look into price - rev/#bookings    look at correlation between price and cancelation rate#####
+
 ```{r}
 #look into days prior 
 
 h2_train %>%
-  select(daily_gross_bookings, daily_cxl_bookings, daily_net_rev, days_prior) %>%
+  select(OTB, OTB_to_be_cxl, OTB_rev, days_prior) %>%
   group_by(days_prior) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings),
-            avg_cancels = mean(daily_cxl_bookings),
-            avg_net_rev = mean(daily_net_rev)) %>%
-  arrange(desc(avg_net_rev)) %>%
+  summarise(avg_bookings = mean(OTB),
+            avg_cancels = mean(OTB_to_be_cxl),
+            avg_net_rev = mean(OTB_rev)) %>%
+  arrange(days_prior) %>%
   kable(align = c("c", "c", "c", "c")) %>% 
   kable_styling(bootstrap_options = c("striped", "condensed", "bordered")) %>% 
   column_spec(1:4, color = "#000000")
@@ -399,11 +552,11 @@ h2_train %>%
 #graphical representation of above
 
 h2_train %>%
-  select(days_prior, daily_gross_bookings, daily_cxl_bookings, daily_net_rev) %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
   group_by(days_prior) %>%
-  summarise(avg_net_rev = mean(daily_net_rev),
-            avg_bookings = mean(daily_gross_bookings),
-            avg_cxl = mean(daily_cxl_bookings)) %>%
+  summarise(avg_net_rev = mean(OTB_rev),
+            avg_bookings = mean(OTB),
+            avg_cxl = mean(OTB_to_be_cxl)) %>%
   ggplot() +
   geom_line(aes(x = days_prior, y = avg_bookings), color = "red") +
   geom_line(aes(x = days_prior, y = avg_cxl), color = "blue") +
@@ -421,9 +574,9 @@ h2_train %>%
 #net revenue and days prior
 
 h2_train %>%
-  select(days_prior, daily_gross_bookings, daily_cxl_bookings, daily_net_rev) %>%
+  select(days_prior, OTB, OTB_to_be_cxl, OTB_rev) %>%
   group_by(days_prior) %>%
-  summarise(avg_net_rev = mean(daily_net_rev)) %>%
+  summarise(avg_net_rev = mean(OTB_rev)) %>%
   ggplot() +
   geom_line(aes(x = days_prior, y = avg_net_rev, color = "red")) +
            theme_minimal() +
@@ -443,9 +596,9 @@ h2_train %>%
 h2_train$month = month(h2_train$stay_dt)
 
 h2_train %>%
-  select(month, product_type, daily_gross_bookings) %>%
+  select(month, product_type, OTB) %>%
   group_by(month, product_type) %>%
-  summarise(avg_bookings = mean(daily_gross_bookings)) %>%
+  summarise(avg_bookings = mean(OTB)) %>%
   ggplot(aes(x = reorder(month, -avg_bookings), y = avg_bookings, fill = product_type)) +
            geom_bar(stat = "identity", width = .8, color = "white", position = "dodge") +
            theme_minimal() +
