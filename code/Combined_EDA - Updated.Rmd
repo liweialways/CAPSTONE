@@ -1,5 +1,5 @@
 ---
-title: "Hotel 1 EDA"
+title: "Hotel Cancellation EDA"
 author: "Caitlin Howansky & Wei Li"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
@@ -96,6 +96,14 @@ First look at the data shows that the data seems relatively clean with no null v
 h1_train <-  h1_train %>%
   filter(OTB!=0) %>% 
   mutate(price = OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB)
+
+h1_train <- h1_train %>%
+  filter(days_prior < 33)
+
+h1_train <- h1_train %>%
+  mutate(day_type = case_when(day_of_week == '7' ~ 'weekend',
+                              day_of_week == '1' ~ 'weekend', 
+                              TRUE ~'weekday'))
 ```
 
 Filtered out the 0 OTB so that every row will have a valid price.
@@ -131,7 +139,7 @@ h1_train_1 <- h1_train %>%
                                          product_type == 'CORPORATE' ~ 'CORP/BUS',
                                          product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'CORP/BUS',
                                          product_type == 'GROUP' ~ 'GROUP',
-                                         product_type == 'MEMBERSHIP' ~ 'MEM/OTHER',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'MEM/OTHER',
                                          product_type == 'OTHER' ~ 'MEM/OTHER',
                                          product_type == 'UNFENCED' ~ 'GOV/UNFENC',
                                          product_type == 'GOVERNMENT' ~ 'GOV/UNFENC'))
@@ -228,6 +236,12 @@ h1_train %>%
 + The amount of observations for each days prior goes down significantly after day 32. We will truncate the days prior here. 
 
 ```{r}
+h1_train <- h1_train %>%
+  filter(days_prior < 33)
+```
+
+
+```{r}
 # number of cancellations in each product type
 
 h1_train %>% 
@@ -276,7 +290,7 @@ h1_train_3 <- h1_train %>%
 #truncate days prior to 32
 
 h1_train_3 <- h1_train_3 %>%
-            filter(days_prior <= 32)
+            filter(days_prior <= 33)
 ```
 
 
@@ -707,6 +721,14 @@ summary(mod4)
 h2_train <-  h2_train %>%
   filter(OTB!=0) %>% 
   mutate(price = OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB)
+
+h2_train <- h2_train %>%
+  filter(days_prior < 32)
+
+h2_train <- h2_train %>%
+  mutate(day_type = case_when(day_of_week == '7' ~ 'weekend',
+                              day_of_week == '1' ~ 'weekend', 
+                              TRUE ~'weekday'))
 ```
 
 ##__Grouping Methods __
@@ -826,6 +848,11 @@ h2_train %>%
 ```
 
 + The amount of observations for each days prior goes down significantly after day 31. We will truncate the days prior here. 
+```{r}
+h2_train <- h2_train %>%
+  filter(days_prior < 31)
+```
+
 
 ```{r}
 h2_train %>% 

@@ -1,0 +1,414 @@
+---
+title: "Hotel Cancellation EDA"
+author: "Caitlin Howansky & Wei Li"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+``
+
+*****Run Combined_EDA before running this file
+
+```{r}
+#get just the last three weeks for training data 
+hot1 <-  hot1[hot1$stay_dt >(max(hot1$stay_dt) - 21),]
+hot2 <-  hot1[hot2$stay_dt >(max(hot2$stay_dt) - 21),]
+```
+```{r}
+#truncate the days prior for test data
+hot1 <- hot1 %>% 
+          filter(days_prior < 33)
+
+hot2 <- hot2 %>%
+          filter(days_prior < 32)
+
+#add price, cxl rate
+hot1<-  hot1 %>%
+  filter(OTB!=0) %>% 
+  mutate(price = OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB)
+
+hot2 <-  hot2 %>%
+  filter(OTB!=0) %>% 
+  mutate(price = OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB)
+
+#add month
+hot1$month = month(hot1$stay_dt)
+hot2$month = month(hot2$stay_dt)
+
+#add weekday/weekend
+hot1 <- hot1 %>%
+  mutate(day_type = case_when(day_of_week == '7' ~ 'weekend',
+                              day_of_week == '1' ~ 'weekend', 
+                              TRUE ~'weekday'))
+hot2 <- hot2 %>%
+  mutate(day_type = case_when(day_of_week == '7' ~ 'weekend',
+                              day_of_week == '1' ~ 'weekend', 
+                              TRUE ~'weekday'))
+```
+
+
+##__Hotel 1 - ATL__
+##__CXL Rate and days prior__
+```{r}
+# calculate cancellation rate just by days prior and 
+dp <- h1_train %>%
+      select(days_prior, OTB, OTB_to_be_cxl, OTB_cxl_rate) %>%
+      group_by(days_prior) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_test <- hot1 %>%
+      select(days_prior, OTB, OTB_to_be_cxl, OTB_cxl_rate, OTB_cxl_rate) %>%
+      group_by(days_prior) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_mod <- left_join(dp, dp_test, by = 'days_prior')
+```
+
+
+##__CXL Rate by groups, days prior, and weekdays__
+```{r}
+# use weekdays and grouping one
+# get test data ready
+
+hot1_test_1 <- hot1 %>%
+      mutate(prod_group_perc = case_when(product_type == 'OPAQUE' ~ 'OP/FENC',
+                                         product_type == 'FENCED' ~ 'OP/FENC',
+                                         product_type == 'CORPORATE' ~ 'CORP/BUS',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'CORP/BUS',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'MEM/OTHER',
+                                         product_type == 'OTHER' ~ 'MEM/OTHER',
+                                         product_type == 'UNFENCED' ~ 'GOV/UNFENC',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/UNFENC'))
+hot1_test_2 <- hot1 %>%
+      mutate(prod_group_behav = case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
+                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
+                                         product_type == 'CORPORATE' ~ 'CORPORATE',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'GOV/BUS/MEM',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'GOV/BUS/MEM',
+                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
+                                         product_type == 'UNFENCED' ~ 'UNFENCED',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/BUS/MEM'))
+
+hot1_test_3 <- hot1 %>%
+      mutate(prod_group_cxl_rate = case_when(product_type == 'OPAQUE' ~ 'GOV/UNFEN/OP',
+                                         product_type == 'FENCED' ~ 'CORP/FEN/MEM',
+                                         product_type == 'CORPORATE' ~ 'CORP/FEN/MEM',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'OTH/BTA',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP' ~ 'CORP/FEN/MEM',
+                                         product_type == 'OTHER' ~ 'OTH/BTA',
+                                         product_type == 'UNFENCED' ~ 'GOV/UNFEN/OP',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/UNFEN/OP'))
+```
+
+
+```{r}
+#group 1 and days prior
+
+dp_group1 <- h1_train_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_perc, day_of_week) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_test <- hot1_test_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_perc, day_of_week) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_mod <- left_join(dp_group1, dp_group1_test, by = c('days_prior', 'prod_group_perc', 'day_of_week'))
+```
+
+```{r}
+#group 2 and days prior
+dp_group2 <- h1_train_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_behav, day_of_week) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_test <- hot1_test_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_behav, day_of_week) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_mod <- left_join(dp_group2, dp_group2_test, by = c('days_prior', 'prod_group_behav', 'day_of_week'))
+```
+
+```{r}
+#group 3 and days prior
+dp_group3 <- h1_train_3 %>%
+      select(days_prior, prod_group_cxl_rate, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_cxl_rate, day_of_week) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group3_test <- hot1_test_3 %>%
+      select(days_prior, prod_group_cxl_rate, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_cxl_rate, day_of_week) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group3_mod <- left_join(dp_group3, dp_group3_test, by = c('days_prior', 'prod_group_cxl_rate', 'day_of_week'))
+```
+
+
+
+##__CXL Rate by groups, days prior, and weekdays, and month__
+
+
+```{r}
+#group 1 and days prior
+
+dp_group1 <- h1_train_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_of_week, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_test <- hot1_test_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_of_week, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_month_mod <- left_join(dp_group1, dp_group1_test, by = c('days_prior', 'prod_group_perc', 'day_of_week', 'month'))
+```
+
+```{r}
+#group 2 and days prior
+dp_group2 <- h1_train_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_of_week, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_test <- hot1_test_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_of_week, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_month_mod <- left_join(dp_group2, dp_group2_test, by = c('days_prior', 'prod_group_behav', 'day_of_week', 'month'))
+```
+
+```{r}
+#group 3 and days prior
+dp_group3 <- h1_train_3 %>%
+      select(days_prior, prod_group_cxl_rate, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_cxl_rate, day_of_week, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group3_test <- hot1_test_3 %>%
+      select(days_prior, prod_group_cxl_rate, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_cxl_rate, day_of_week, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group3_month_mod <- left_join(dp_group3, dp_group3_test, by = c('days_prior', 'prod_group_cxl_rate', 'day_of_week', 'month'))
+```
+
+
+##__Split up by weekday/weekend__
+
+```{r}
+#group 1 and days prior
+
+dp_group1 <- h1_train_1 %>%
+      select(days_prior, prod_group_perc, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_type, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_test <- hot1_test_1 %>%
+      select(days_prior, prod_group_perc, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_type, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_month_daytype_mod <- left_join(dp_group1, dp_group1_test, by = c('days_prior', 'prod_group_perc', 'day_type', 'month'))
+```
+
+```{r}
+#group 2 and days prior
+dp_group2 <- h1_train_2 %>%
+      select(days_prior, prod_group_behav, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_type, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_test <- hot1_test_2 %>%
+      select(days_prior, prod_group_behav, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_type, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_month_daytype_mod <- left_join(dp_group2, dp_group2_test, by = c('days_prior', 'prod_group_behav', 'day_type', 'month'))
+```
+
+```{r}
+#group 3 and days prior
+dp_group3 <- h1_train_3 %>%
+      select(days_prior, prod_group_cxl_rate, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_cxl_rate, day_type, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group3_test <- hot1_test_3 %>%
+      select(days_prior, prod_group_cxl_rate, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_cxl_rate, day_type, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group3_month_daytype_mod <- left_join(dp_group3, dp_group3_test, by = c('days_prior', 'prod_group_cxl_rate', 'day_type', 'month'))
+```
+
+
+##__Hotel 2 - NY__
+##__CXL Rate and days prior__
+```{r}
+# calculate cancellation rate just by days prior and 
+dp <- h2_train %>%
+      select(days_prior, OTB, OTB_to_be_cxl, OTB_cxl_rate) %>%
+      group_by(days_prior) %>%
+      summarise(predict_cxl_rate = mean(OTB_cxl_rate))
+
+dp_test <- hot2 %>%
+      select(days_prior, OTB, OTB_to_be_cxl, OTB_cxl_rate, OTB_cxl_rate) %>%
+      group_by(days_prior) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_mod_2 <- left_join(dp, dp_test, by = 'days_prior')
+```
+
+
+##__CXL Rate by groups, days prior, and weekdays__
+```{r}
+# use weekdays and grouping one
+# get test data ready
+
+hot2_test_1 <- hot2 %>%
+      mutate(prod_group_perc = case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
+                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
+                                         product_type == 'CORPORATE' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'GROUP' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'TACTICAL MARKETING' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
+                                         product_type == 'UNFENCED' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
+                                         product_type == 'WHOLESALE' ~ 'UNF/WHOLE/MEM/BUS'))
+hot2_test_2 <- hot2 %>%
+      mutate(prod_group_behav = case_when(product_type == 'OPAQUE' ~ 'OTH/OPA/FEN',
+                                         product_type == 'FENCED' ~ 'OTH/OPA/FEN',
+                                         product_type == 'CORPORATE' ~ 'CORP/MEMB/WHOLE',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'BTA/UNFEN/CORP/MM',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'TACTICAL MARKETING' ~ 'TACT/WHOLE',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'BTA/UNFEN/CORP/MM',
+                                         product_type == 'OTHER' ~ 'OTH/OPA/FEN',
+                                         product_type == 'UNFENCED' ~ 'BTA/UNFEN/CORP/MM',
+                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
+                                         product_type == 'WHOLESALE' ~ 'TACT/WHOLE'))
+
+```
+
+
+```{r}
+#group 1 and days prior
+
+dp_group1 <- h2_train_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_perc, day_of_week) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_test <- hot2_test_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_perc, day_of_week) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp2_group1_mod <- left_join(dp_group1, dp_group1_test, by = c('days_prior', 'prod_group_perc', 'day_of_week'))
+```
+
+```{r}
+#group 2 and days prior
+dp_group2 <- h2_train_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_behav, day_of_week) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_test <- hot2_test_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl) %>%
+      group_by(days_prior, prod_group_behav, day_of_week) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp2_group2_mod <- left_join(dp_group2, dp_group2_test, by = c('days_prior', 'prod_group_behav', 'day_of_week'))
+```
+
+
+
+
+##__CXL Rate by groups, days prior, and weekdays, and month__
+
+
+```{r}
+#group 1 and days prior
+
+dp_group1 <- h2_train_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_of_week, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_test <- hot2_test_1 %>%
+      select(days_prior, prod_group_perc, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_of_week, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp2_group1_month_mod <- left_join(dp_group1, dp_group1_test, by = c('days_prior', 'prod_group_perc', 'day_of_week', 'month'))
+```
+
+```{r}
+#group 2 and days prior
+dp_group2 <- h2_train_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_of_week, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_test <- hot2_test_2 %>%
+      select(days_prior, prod_group_behav, day_of_week, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_of_week, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp2_group2_month_mod <- left_join(dp_group2, dp_group2_test, by = c('days_prior', 'prod_group_behav', 'day_of_week', 'month'))
+```
+
+
+
+##__Split up by weekday/weekend__
+
+```{r}
+#group 1 and days prior
+
+dp_group1 <- h2_train_1 %>%
+      select(days_prior, prod_group_perc, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_type, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group1_test <- hot2_test_1 %>%
+      select(days_prior, prod_group_perc, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_perc, day_type, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp2_group1_month_daytype_mod <- left_join(dp_group1, dp_group1_test, by = c('days_prior', 'prod_group_perc', 'day_type', 'month'))
+```
+
+```{r}
+#group 2 and days prior
+dp_group2 <- h1_train_2 %>%
+      select(days_prior, prod_group_behav, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_type, month) %>%
+      summarise(predict_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp_group2_test <- hot1_test_2 %>%
+      select(days_prior, prod_group_behav, day_type, OTB, OTB_to_be_cxl, month) %>%
+      group_by(days_prior, prod_group_behav, day_type, month) %>%
+      summarise(true_cxl_rate = sum(OTB_to_be_cxl)/sum(OTB))
+
+dp2_group2_month_daytype_mod <- left_join(dp_group2, dp_group2_test, by = c('days_prior', 'prod_group_behav', 'day_type', 'month'))
+```
+
