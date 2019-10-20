@@ -283,7 +283,7 @@ h1_train_3 <- h1_train %>%
                                          product_type == 'CORPORATE' ~ 'CORP/FEN/MEM',
                                          product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'OTH/BTA',
                                          product_type == 'GROUP' ~ 'GROUP',
-                                         product_type == 'MEMBERSHIP' ~ 'CORP/FEN/MEM',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'CORP/FEN/MEM',
                                          product_type == 'OTHER' ~ 'OTH/BTA',
                                          product_type == 'UNFENCED' ~ 'GOV/UNFEN/OP',
                                          product_type == 'GOVERNMENT' ~ 'GOV/UNFEN/OP'))
