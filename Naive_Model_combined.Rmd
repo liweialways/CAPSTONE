@@ -14,7 +14,9 @@ output:
 ---
 
 #__Get Data Ready__
+
 ##__Repeat the EDA part__
+
 ```{r message = FALSE, echo = FALSE, error = FALSE}
 # Clear environment of variables and functions
 rm(list = ls(all = TRUE)) 
@@ -553,6 +555,12 @@ a_dp_mase <- a_dp_fcs %>%
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 a_dp_mase
 ```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_mae,a_dp_mape, by="dp_range"), a_dp_mase, by="dp_range")
+
+```
+
 
 ###__CXL Rate by groups, days prior, and weekdays__
 #### Grouping method 1
@@ -607,6 +615,14 @@ a_dp_grp1_wd_mase <- a_dp_grp1_wd_fcs %>%
 a_dp_grp1_wd_mase
 ```
 
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_grp1_wd_mae,a_dp_grp1_wd_mape, by=c("dp_range", "day_of_week","prod_group_perc")), a_dp_grp1_wd_mase, by="dp_range") %>% 
+  select(dp_range, day_of_week.x, prod_group_perc.x, meanAE, meanAPE, meanASE)
+
+```
+
+
 #### Grouping method 2
 
 ```{r}
@@ -659,7 +675,12 @@ a_dp_grp2_wd_mase <- a_dp_grp2_wd_fcs %>%
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 a_dp_grp2_wd_mase
 ```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_grp2_wd_mae,a_dp_grp2_wd_mape, by=c("dp_range", "day_of_week","prod_group_behav")), a_dp_grp2_wd_mase, by="dp_range") %>% 
+  select(dp_range, day_of_week.x, prod_group_behav.x, meanAE, meanAPE, meanASE)
 
+```
 #### Grouping method 3
 ```{r}
 # forecast otb to survive
@@ -713,6 +734,12 @@ a_dp_grp3_wd_mase <- a_dp_grp3_wd_fcs %>%
 a_dp_grp3_wd_mase
 ```
 
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_grp3_wd_mae,a_dp_grp3_wd_mape, by=c("dp_range", "day_of_week","prod_group_cxl_rate")), a_dp_grp1_wd_mase, by="dp_range") %>% 
+  select(dp_range, day_of_week.x, prod_group_cxl_rate, meanAE, meanAPE, meanASE)
+
+```
 
 ###__CXL Rate by groups, days prior, day type__
 #### Grouping method 1
@@ -731,7 +758,7 @@ a_dp_grp1_dtp_mae <- a_dp_grp1_dtp_fcs %>%
                                   days_prior >=15 & days_prior<=21 ~ '15_21',
                                   days_prior >=22 & days_prior<=28 ~ '22_28',
                                   days_prior >=29 ~ '29_32')) %>% 
-  group_by(dp_range, day_of_week, prod_group_perc) %>% 
+  group_by(dp_range, day_type, prod_group_perc) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
 a_dp_grp1_dtp_mae
 ```
@@ -745,7 +772,7 @@ a_dp_grp1_dtp_mape <- a_dp_grp1_dtp_fcs %>%
                                   days_prior >=15 & days_prior<=21 ~ '15_21',
                                   days_prior >=22 & days_prior<=28 ~ '22_28',
                                   days_prior >=29 ~ '29_32')) %>% 
-  group_by(dp_range, day_of_week, prod_group_perc) %>% 
+  group_by(dp_range, day_type, prod_group_perc) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
 a_dp_grp1_dtp_mape
 ```
@@ -761,9 +788,15 @@ a_dp_grp1_dtp_mase <- a_dp_grp1_dtp_fcs %>%
                                   days_prior >=29 ~ '29_32'),
          abs_diff_1=abs(OTB_to_survive-fcst_svv),
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
-  group_by(dp_range, day_of_week, prod_group_perc) %>% 
+  group_by(dp_range, day_type, prod_group_perc) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 a_dp_grp1_dtp_mase
+```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_grp1_dtp_mae,a_dp_grp1_dtp_mape, by=c("dp_range", "day_type","prod_group_perc")), a_dp_grp1_dtp_mase, by="dp_range") %>% 
+  select(dp_range, day_type.x, prod_group_perc.x, meanAE, meanAPE, meanASE)
+
 ```
 
 #### Grouping method 2
@@ -798,7 +831,7 @@ a_dp_grp2_dtp_mape <- a_dp_grp2_dtp_fcs %>%
                                   days_prior >=15 & days_prior<=21 ~ '15_21',
                                   days_prior >=22 & days_prior<=28 ~ '22_28',
                                   days_prior >=29 ~ '29_32')) %>% 
-  group_by(dp_range, day_of_week, prod_group_behav) %>% 
+  group_by(dp_range, day_type, prod_group_behav) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
 a_dp_grp2_dtp_mape
 ```
@@ -818,7 +851,12 @@ a_dp_grp2_dtp_mase <- a_dp_grp2_dtp_fcs %>%
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 a_dp_grp2_dtp_mase
 ```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_grp2_dtp_mae,a_dp_grp2_dtp_mape, by=c("dp_range", "day_type","prod_group_behav")), a_dp_grp2_dtp_mase, by="dp_range") %>% 
+  select(dp_range, day_type.x, prod_group_behav.x, meanAE, meanAPE, meanASE)
 
+```
 #### Grouping method 3
 ```{r}
 # forecast otb to survive
@@ -851,7 +889,7 @@ a_dp_grp3_dtp_mape <- a_dp_grp3_dtp_fcs %>%
                                   days_prior >=15 & days_prior<=21 ~ '15_21',
                                   days_prior >=22 & days_prior<=28 ~ '22_28',
                                   days_prior >=29 ~ '29_32')) %>% 
-  group_by(dp_range, day_of_week, prod_group_cxl_rate) %>% 
+  group_by(dp_range, day_type, prod_group_cxl_rate) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
 a_dp_grp3_dtp_mape
 ```
@@ -872,7 +910,12 @@ a_dp_grp3_dtp_mase <- a_dp_grp3_dtp_fcs %>%
 a_dp_grp3_dtp_mase
 ```
 
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(a_dp_grp3_dtp_mae,a_dp_grp3_dtp_mape, by=c("dp_range", "day_type","prod_group_cxl_rate")), a_dp_grp3_dtp_mase, by="dp_range") %>% 
+  select(dp_range, day_type.x, prod_group_cxl_rate.x, meanAE, meanAPE, meanASE)
 
+```
 
 ##__Hotel 2 - ATL__
 ###__CXL Rate by days prior__
@@ -928,6 +971,11 @@ n_dp_mase <- n_dp_fcs %>%
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 n_dp_mase
 ```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(n_dp_mae,n_dp_mape, by="dp_range"), n_dp_mase, by="dp_range")
+
+```
 
 ###__CXL Rate by groups, days prior, and weekdays__
 #### Grouping method 1
@@ -981,6 +1029,12 @@ n_dp_grp1_wd_mase <- n_dp_grp1_wd_fcs %>%
   group_by(dp_range, day_of_week, prod_group_perc) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 n_dp_grp1_wd_mase
+```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(n_dp_grp1_wd_mae,n_dp_grp1_wd_mape, by=c("dp_range", "day_of_week","prod_group_perc")), n_dp_grp1_wd_mase, by="dp_range") %>% 
+  select(dp_range, day_of_week.x, prod_group_perc.x, meanAE, meanAPE, meanASE)
+
 ```
 
 #### Grouping method 2
@@ -1038,6 +1092,12 @@ n_dp_grp2_wd_mase <- n_dp_grp2_wd_fcs %>%
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 n_dp_grp2_wd_mase
 ```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(n_dp_grp2_wd_mae,n_dp_grp2_wd_mape, by=c("dp_range", "day_of_week","prod_group_behav")), n_dp_grp2_wd_mase, by="dp_range") %>% 
+  select(dp_range, day_of_week.x, prod_group_behav.x, meanAE, meanAPE, meanASE)
+
+```
 
 ###__CXL Rate by groups, days prior, day type__
 #### Grouping method 1
@@ -1056,7 +1116,7 @@ n_dp_grp1_dtp_mae <- n_dp_grp1_dtp_fcs %>%
                                   days_prior >=15 & days_prior<=21 ~ '15_21',
                                   days_prior >=22 & days_prior<=28 ~ '22_28',
                                   days_prior >=29 ~ '29_32')) %>% 
-  group_by(dp_range, day_of_week, prod_group_perc) %>% 
+  group_by(dp_range, day_type, prod_group_perc) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
 n_dp_grp1_dtp_mae
 ```
@@ -1088,11 +1148,16 @@ n_dp_grp1_dtp_mase <- n_dp_grp1_dtp_fcs %>%
                                   days_prior >=29 ~ '29_32'),
          abs_diff_1=abs(OTB_to_survive-fcst_svv),
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
-  group_by(dp_range, day_of_week, prod_group_perc) %>% 
+  group_by(dp_range, day_type, prod_group_perc) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 n_dp_grp1_dtp_mase
 ```
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(n_dp_grp1_dtp_mae,n_dp_grp1_dtp_mape, by=c("dp_range", "day_type","prod_group_perc")), n_dp_grp1_dtp_mase, by="dp_range") %>% 
+  select(dp_range, day_type.x, prod_group_perc.x, meanAE, meanAPE, meanASE)
 
+```
 #### Grouping method 2
 ```{r}
 # forecast otb to survive
@@ -1145,4 +1210,11 @@ n_dp_grp2_dtp_mase <- n_dp_grp2_dtp_fcs %>%
   group_by(dp_range, day_type, prod_group_behav) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
 n_dp_grp2_dtp_mase
+```
+
+```{r}
+# MAE, MAPE, MASE
+left_join(left_join(n_dp_grp2_dtp_mae,n_dp_grp2_dtp_mape, by=c("dp_range", "day_type","prod_group_behav")), n_dp_grp2_dtp_mase, by="dp_range") %>% 
+  select(dp_range, day_type.x, prod_group_behav.x, meanAE, meanAPE, meanASE)
+
 ```
