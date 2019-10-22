@@ -736,8 +736,8 @@ a_dp_grp3_wd_mase
 
 ```{r}
 # MAE, MAPE, MASE
-left_join(left_join(a_dp_grp3_wd_mae,a_dp_grp3_wd_mape, by=c("dp_range", "day_of_week","prod_group_cxl_rate")), a_dp_grp1_wd_mase, by="dp_range") %>% 
-  select(dp_range, day_of_week.x, prod_group_cxl_rate, meanAE, meanAPE, meanASE)
+left_join(left_join(a_dp_grp3_wd_mae,a_dp_grp3_wd_mape, by=c("dp_range", "day_of_week","prod_group_cxl_rate")), a_dp_grp3_wd_mase, by="dp_range") %>% 
+  select(dp_range, day_of_week.x, prod_group_cxl_rate.x, meanAE, meanAPE, meanASE)
 
 ```
 
