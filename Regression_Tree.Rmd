@@ -1,0 +1,154 @@
+---
+title: "Hotel Cancellation - Decision Trees"
+author: "Caitlin Howansky & Wei Li"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+#__Get Data Ready__
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+```
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+library(tidyverse) 
+library(dplyr) # joins
+#library(janitor) # pretty cross-tabs
+library(kableExtra) # pretty html tables
+library(formattable)
+library(gridExtra)
+library(scales)
+library(pastecs)
+library(GGally)
+library(lubridate)
+library(directlabels)
+library(Metrics)
+library(tree)
+library(ISLR)
+```
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# disable scientific notation in R
+options(scipen=999)
+```
+
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# load the data files
+hot1 <- read_csv('BOOKINGS_ATLCP.csv')
+hot2 <- read_csv('BOOKINGS_NYCHA.csv')
+
+```
+
+```{r}
+# change date fields to date
+hot1$stay_dt <- as.Date(hot1$stay_dt, "%m/%d/%Y")
+hot1$booking_dt <- as.Date(hot1$booking_dt, "%m/%d/%Y")
+hot2$stay_dt <- as.Date(hot2$stay_dt, "%m/%d/%Y")
+hot2$booking_dt <- as.Date(hot2$booking_dt, "%m/%d/%Y")
+
+#create field for non-numerical dow
+hot1$day_of_week <- as.factor(hot1$dow)
+hot2$day_of_week <- as.factor(hot2$dow)
+```
+
+```{r}
+# filter OTB=0, truncate the data by dp, add price, otb_cxl_rate, day_type, month, regrouping tags to the dataset
+# Reserve last 3 weeks data as Validation Data and the prior are Training Data
+hot1 <- hot1 %>% 
+  filter(OTB!=0, days_prior<33) %>% 
+  mutate(price=OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB,
+         day_type = as.factor(case_when(day_of_week == '7' ~ 'weekend',
+                              day_of_week == '1' ~ 'weekend', 
+                              TRUE ~'weekday')),
+         month = as.factor(month(stay_dt)),
+         prod_group_perc = as.factor(case_when(product_type == 'OPAQUE' ~ 'OP/FENC',
+                                         product_type == 'FENCED' ~ 'OP/FENC',
+                                         product_type == 'CORPORATE' ~ 'CORP/BUS',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'CORP/BUS',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'MEM/OTHER',
+                                         product_type == 'OTHER' ~ 'MEM/OTHER',
+                                         product_type == 'UNFENCED' ~ 'GOV/UNFENC',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/UNFENC')),
+         prod_group_behav = as.factor(case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
+                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
+                                         product_type == 'CORPORATE' ~ 'CORPORATE',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'GOV/BUS/MEM',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'GOV/BUS/MEM',
+                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
+                                         product_type == 'UNFENCED' ~ 'UNFENCED',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/BUS/MEM')),
+         prod_group_cxl_rate = as.factor(case_when(product_type == 'OPAQUE' ~ 'GOV/UNFEN/OP',
+                                         product_type == 'FENCED' ~ 'CORP/FEN/MEM',
+                                         product_type == 'CORPORATE' ~ 'CORP/FEN/MEM',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'OTH/BTA',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'CORP/FEN/MEM',
+                                         product_type == 'OTHER' ~ 'OTH/BTA',
+                                         product_type == 'UNFENCED' ~ 'GOV/UNFEN/OP',
+                                         product_type == 'GOVERNMENT' ~ 'GOV/UNFEN/OP')),
+         day_type_cxl_rate = as.factor(case_when(day_of_week=="1"~"SUN", 
+                                                 day_of_week=="6"~"FRI/SAT",
+                                                 day_of_week=="7"~"FRI/SAT",
+                                                 TRUE ~ "MON/TUE/WED/THU")))
+
+hot2 <- hot2 %>% 
+  filter(OTB!=0, days_prior<32) %>% 
+  mutate(price=OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB,
+         day_type = as.factor(case_when(day_of_week == '7' ~ 'weekend',
+                              day_of_week == '1' ~ 'weekend', 
+                              TRUE ~'weekday')),
+         month = as.factor(month(stay_dt)),
+         prod_group_perc = as.factor(case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
+                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
+                                         product_type == 'CORPORATE' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'GROUP' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'TACTICAL MARKETING' ~ 'CORP/GROUP/TACT',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
+                                         product_type == 'UNFENCED' ~ 'UNF/WHOLE/MEM/BUS',
+                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
+                                         product_type == 'WHOLESALE' ~ 'UNF/WHOLE/MEM/BUS')),
+         prod_group_behav = as.factor(case_when(product_type == 'OPAQUE' ~ 'OTH/OPA/FEN',
+                                         product_type == 'FENCED' ~ 'OTH/OPA/FEN',
+                                         product_type == 'CORPORATE' ~ 'CORP/MEMB/WHOLE',
+                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'BTA/UNFEN/CORP/MM',
+                                         product_type == 'GROUP' ~ 'GROUP',
+                                         product_type == 'TACTICAL MARKETING' ~ 'TACT/WHOLE',
+                                         product_type == 'MEMBERSHIP MARKETING' ~ 'BTA/UNFEN/CORP/MM',
+                                         product_type == 'OTHER' ~ 'OTH/OPA/FEN',
+                                         product_type == 'UNFENCED' ~ 'BTA/UNFEN/CORP/MM',
+                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
+                                         product_type == 'WHOLESALE' ~ 'TACT/WHOLE')),
+         day_type_cxl_rate = as.factor(case_when(day_of_week=="1"~"SUN", 
+                                                 day_of_week=="6"~"FRI/SAT",
+                                                 day_of_week=="7"~"FRI/SAT",
+                                                 TRUE ~ "MON/TUE/WED/THU")))
+h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
+h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
+```
+
+
+#__Decision Tree Models__
+##__Hotel 1__
+
+```{r}
+first_tree = tree(OTB_cxl_rate ~., data = h1_train)
+summary(first_tree)
+plot(first_tree)
+text(first_tree, pretty = 0)
+```
+

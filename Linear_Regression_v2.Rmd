@@ -32,7 +32,6 @@ library(scales)
 library(pastecs)
 library(GGally)
 library(lubridate)
-library(directlabels)
 library(Metrics)
 ```
 
@@ -45,7 +44,6 @@ options(scipen=999)
 # load the data files
 hot1 <- read_csv('BOOKINGS_ATLCP.csv')
 hot2 <- read_csv('BOOKINGS_NYCHA.csv')
-
 ```
 
 ```{r}
@@ -54,7 +52,6 @@ hot1$stay_dt <- as.Date(hot1$stay_dt, "%m/%d/%Y")
 hot1$booking_dt <- as.Date(hot1$booking_dt, "%m/%d/%Y")
 hot2$stay_dt <- as.Date(hot2$stay_dt, "%m/%d/%Y")
 hot2$booking_dt <- as.Date(hot2$booking_dt, "%m/%d/%Y")
-
 #create field for non-numerical dow
 hot1$day_of_week <- as.factor(hot1$dow)
 hot2$day_of_week <- as.factor(hot2$dow)
@@ -101,7 +98,6 @@ hot1 <- hot1 %>%
                                                  day_of_week=="6"~"FRI/SAT",
                                                  day_of_week=="7"~"FRI/SAT",
                                                  TRUE ~ "MON/TUE/WED/THU")))
-
 hot2 <- hot2 %>% 
   filter(OTB!=0, days_prior<32) %>% 
   mutate(price=OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB,
@@ -166,7 +162,6 @@ hist(h1_train$cummulative_cxl_bookings)
 hist(h1_train$daily_gross_bookings)
 hist(h1_train$daily_cxl_bookings)
 hist(h1_train$price)
-
 ```
 
 + Otb cxl rate, cumm gross bookings/cxl bookings, daily gross bookings/ cxl bookings
@@ -189,15 +184,63 @@ hist(h1_train$days_prior^2)
 hist(h1_train$cummulative_cxl_bookings^2)
 hist(h1_train$daily_gross_bookings^2)
 hist(h1_train$daily_cxl_bookings^2)
-
 ```
 
 + these were not helpful
 
+
+```{r}
+h1_train %>% 
+            select(days_prior, OTB_cxl_rate, prod_group_perc) %>%
+            group_by(days_prior, prod_group_perc) %>%
+            summarise(OTB_cxl_rate = mean(OTB_cxl_rate))%>%
+            ggplot(aes(x = days_prior, y = OTB_cxl_rate, color = prod_group_perc))+
+            geom_line()
+```
+from this gov/unf and corp/bus may be better as quadratic while all others can be log 
+
+```{r}
+h1_train %>% 
+            select(days_prior, OTB_cxl_rate, prod_group_behav) %>%
+            group_by(days_prior, prod_group_behav) %>%
+            summarise(OTB_cxl_rate = mean(OTB_cxl_rate))%>%
+            ggplot(aes(x = days_prior, y = OTB_cxl_rate, color = prod_group_behav))+
+            geom_line()
+```
+- maybe gov/bus/mem should be quadratic
+
+```{r}
+h1_train %>% 
+            select(days_prior, OTB_cxl_rate, prod_group_cxl_rate) %>%
+            group_by(days_prior, prod_group_cxl_rate) %>%
+            summarise(OTB_cxl_rate = mean(OTB_cxl_rate))%>%
+            ggplot(aes(x = days_prior, y = OTB_cxl_rate, color = prod_group_cxl_rate))+
+            geom_line()
+```
+- oth/bta  and gov/unf/op could be quadratic
+
+```{r}
+h2_train %>% 
+            select(days_prior, OTB_cxl_rate, prod_group_perc) %>%
+            group_by(days_prior, prod_group_perc) %>%
+            summarise(OTB_cxl_rate = mean(OTB_cxl_rate))%>%
+            ggplot(aes(x = days_prior, y = OTB_cxl_rate, color = prod_group_perc))+
+            geom_line()
+```
+
+```{r}
+h2_train %>% 
+            select(days_prior, OTB_cxl_rate, prod_group_behav) %>%
+            group_by(days_prior, prod_group_behav) %>%
+            summarise(OTB_cxl_rate = mean(OTB_cxl_rate))%>%
+            ggplot(aes(x = days_prior, y = OTB_cxl_rate, color = prod_group_behav))+
+            geom_line()
+```
+
 ###__mod1_1: y ~ simple combinations of variables__
 ```{r}
 # Simple combination of variables: days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc
-mod1_1 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc, data = h1_train)
+mod1_1 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc, data = h1_train)
 summary(mod1_1)
 ```
 
@@ -209,45 +252,79 @@ summary(mod1_1)
 
 + Tried to use day_type_cxl_rate (3 types according to cxl rate curves) to replace day_of_week, r-square is 0.1272 larger than day_type but lower than day_of_week. --- It's for sure, the more categories in a variable, the more information can be captured. Then why we want to do regrouping? Because of small sample size? How to determine whether we need to regroup?
 
-+ There is no need to do logarithms/polynomials on x/y, because of 0 values in the variables and highly right skewed data. 
 
 ###__mod1_2: y ~ interaction terms: prod_group_perc*days_prior
 ```{r}
-mod1_2 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h1_train)
+mod1_2 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h1_train)
 summary(mod1_2)
 ```
  + Daily gross bookings and daily cancellation bookings are not statistically significant by any convential methods
-
 ###__mod1_3: y ~ interaction terms: prod_group_perc*days_prior + month*days_prior
 ```{r}
-mod1_3 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h1_train)
+mod1_3 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h1_train)
 summary(mod1_3)
 ```
-
 + Here still using day_of_week instead of regrouping of day, because this produces the best R-squared.
-
 ###__mod1_4: log(y) ~ interaction terms: prod_group_perc*days_prior + month*days_prior
-
 ```{r}
-h1_train <- h1_train %>%
+h1_train_filter <- h1_train %>%
   filter(OTB_cxl_rate > 0)
-
-mod1_4 <- lm(formula=log(OTB_cxl_rate)~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h1_train, na.action=na.omit)
+mod1_4 <- lm(formula=log(OTB_cxl_rate)~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h1_train_filter, na.action=na.omit)
 summary(mod1_4)
 ```
-
 + using log od OTB cxl rate increased R^2 to .3913
-
 + what would happen if we added log of x variables as well 
-
 ###__mod1_5: log(y) ~ log(x) interaction terms: prod_group_perc*days_prior + month*days_prior
 ```{r}
-mod1_5 <- lm(formula=OTB_cxl_rate~exp(days_prior)+log(cummulative_gross_bookings)+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h1_train, na.action=na.omit)
+mod1_5 <- lm(formula=log(OTB_cxl_rate)~days_prior+log(cummulative_gross_bookings)+price+day_of_week+prod_group_perc+prod_group_perc*days_prior, data = h1_train_filter, na.action=na.omit)
 summary(mod1_5)
 ```
 + using log of cummulative gross bookings increases R^2 to .5648
 + this is our best result
 + The not stastically significant variables are daily_cxl_bookings (gets worse when taken out), day of the week 3 and 7, and month 3
+
+###__mod1_6: y ~ exp(x) interaction terms: prod_group_perc*days_prior + month*days_prior
+```{r}
+mod1_6 <- lm(formula=OTB_cxl_rate~ exp(days_prior)+log(cummulative_gross_bookings)+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h1_train, na.action=na.omit)
+summary(mod1_6)
+```
+- converting to exponential of days prior reduced R^2 by a lot; however, it now includes all data points
+
+###__mod1_7: y ~ exp(x) interaction terms: prod_group_perc*days_prior + month*days_prior
+```{r}
+#create dummy variables for product group
+
+h1_train <- h1_train %>% mutate(perc_group_opfenc = case_when(prod_group_perc == 'OP/FENC' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_corpbus = case_when(prod_group_perc == 'CORP/BUS' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_group = case_when(prod_group_perc == 'GROUP' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_memoth = case_when(prod_group_perc == 'MEM/OTHER' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_govunf = case_when(prod_group_perc == 'GOV/UNFENC' ~ '1',
+                                                    TRUE ~ '0'))
+
+mod1_7 <- lm(formula=OTB_cxl_rate~ exp(days_prior)+log(cummulative_gross_bookings)+price+day_of_week+month+perc_group_govunf*days_prior^2 + perc_group_corpbus*days_prior^2 + perc_group_group*exp(days_prior) + perc_group_memoth*exp(days_prior) , data = h1_train, na.action=na.omit)
+summary(mod1_7)
+```
+###__mod1_8: y ~ exp(x) interaction terms: prod_group_perc*days_prior + month*days_prior
+```{r}
+#create dummy variables for product group
+
+h1_train_filter <- h1_train_filter %>% mutate(perc_group_opfenc = case_when(prod_group_perc == 'OP/FENC' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_corpbus = case_when(prod_group_perc == 'CORP/BUS' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_group = case_when(prod_group_perc == 'GROUP' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_memoth = case_when(prod_group_perc == 'MEM/OTHER' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_govunf = case_when(prod_group_perc == 'GOV/UNFENC' ~ '1',
+                                                    TRUE ~ '0'))
+mod1_8 <- lm(formula=log(OTB_cxl_rate) ~ days_prior+log(cummulative_gross_bookings)+price+day_of_week+month+perc_group_govunf*days_prior^2 + perc_group_corpbus*days_prior^2 + perc_group_group*exp(days_prior) + perc_group_memoth*days_prior^2 , data = h1_train_filter, na.action=na.omit)
+summary(mod1_8)
+```
 
 ##__Hotel 2__
 ```{r}
@@ -295,8 +372,6 @@ hist(h2_train$days_prior^2)
 hist(h1_train$cummulative_cxl_bookings^2)
 hist(h1_train$daily_gross_bookings^2)
 hist(h1_train$daily_cxl_bookings^2)
-
-
 ```
 
 
@@ -319,42 +394,36 @@ summary(mod2_1)
 
 ###__mod2_2: y ~ interaction terms: prod_group_perc*days_prior
 ```{r}
-mod2_2 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h2_train)
+mod2_2 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h2_train)
 summary(mod2_2)
 ```
-
-
 ###__mod2_3: y ~ interaction terms: prod_group_perc*days_prior + month*days_prior
 ```{r}
-mod2_3 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h2_train)
+mod2_3 <- lm(formula=OTB_cxl_rate~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h2_train)
 summary(mod2_3)
 ```
-
 + Here still using day_of_week instead of regrouping of day, because this produces the best R-squared. 
-
-
 ###__mod2_4: log(y) ~ interaction terms: prod_group_perc*days_prior + month*days_prior
-
 ```{r}
-h2_train <- h2_train %>%
+h2_train_filtered <- h2_train %>%
   filter(OTB_cxl_rate > 0)
-
-mod2_4 <- lm(formula=log(OTB_cxl_rate)~days_prior+cummulative_cxl_bookings+daily_gross_bookings+daily_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h2_train, na.action=na.omit)
+mod2_4 <- lm(formula=log(OTB_cxl_rate)~days_prior+cummulative_cxl_bookings+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h2_train_filtered, na.action=na.omit)
 summary(mod2_4)
 ```
-
 + using log od OTB cxl rate increased R^2 to .4809
-
 + what would happen if we added log of x variables as well 
-
 ###__mod2_5: log(y) ~ log(x) interaction terms: prod_group_perc*days_prior + month*days_prior
 ```{r}
-mod2_5 <- lm(formula=log(OTB_cxl_rate)~days_prior+log(cummulative_gross_bookings)+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior+month*days_prior, data = h2_train, na.action=na.omit)
+mod2_5 <- lm(formula=log(OTB_cxl_rate)~days_prior+price+day_of_week+month+prod_group_perc+prod_group_perc*days_prior, data = h2_train_filtered, na.action=na.omit)
 summary(mod2_5)
-
 ```
++This creates the best R^2 of .5928. 
 
-+This creates the best R^2 of .5966. 
+###__mod2_6: y ~ exp(x) interaction terms: prod_group_perc*days_prior + month*days_prior
+```{r}
+mod2_6 <- lm(formula=OTB_cxl_rate~ exp(days_prior)+log(cummulative_gross_bookings)+price+day_of_week+month+prod_group_behav+prod_group_behav*days_prior+month*days_prior, data = h2_train, na.action=na.omit)
+summary(mod2_6)
+```
 
 
 
@@ -363,10 +432,8 @@ summary(mod2_5)
 ###__mod1_1__
 ```{r}
 h1_test <- hot1[hot1$stay_dt > (max(hot1$stay_dt) - 21),]
-
 h1_test$predict_cxl_rate <-  predict(mod1_1, h1_test, se.fit=TRUE)$fit
 h1_test$fcst_svv <- h1_test$OTB - h1_test$OTB * h1_test$predict_cxl_rate
-
 ```
 
 ```{r}
@@ -401,7 +468,6 @@ mod1_1_mape
 # MASE
 ## Avg survival rate:
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_1_mase <- h1_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -425,7 +491,6 @@ left_join(left_join(mod1_1_mae,mod1_1_mape, by=c("dp_range")), mod1_1_mase, by=c
 ```{r}
 h1_train$predict_cxl_rate <-  predict(mod1_1, h1_train, se.fit=TRUE)$fit
 h1_train$fcst_svv <- h1_train$OTB - h1_train$OTB * h1_train$predict_cxl_rate
-
 ```
 
 ```{r}
@@ -439,7 +504,6 @@ mod1_1_mae <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 # MAPE: the OTB_to_survive in GOVERNMENT contains 0 values, so MAPE is INF
 mod1_1_mape <- h1_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
@@ -450,11 +514,9 @@ mod1_1_mape <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 # MASE
 ## Avg survival rate:
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_1_mase <- h1_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -466,7 +528,6 @@ mod1_1_mase <- h1_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod1_1_mae,mod1_1_mape, by=c("dp_range")), mod1_1_mase, by=c("dp_range"))
 ```
@@ -475,7 +536,6 @@ left_join(left_join(mod1_1_mae,mod1_1_mape, by=c("dp_range")), mod1_1_mase, by=c
 ```{r}
 h1_test$predict_cxl_rate <-  predict(mod1_2, h1_test, se.fit=TRUE)$fit
 h1_test$fcst_svv <- h1_test$OTB - h1_test$OTB * h1_test$predict_cxl_rate
-
 # MAE
 mod1_2_mae <- h1_test %>% 
   filter(days_prior!=0) %>% 
@@ -486,7 +546,6 @@ mod1_2_mae <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_2_mape <- h1_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -496,9 +555,7 @@ mod1_2_mape <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_2_mase <- h1_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -510,17 +567,14 @@ mod1_2_mase <- h1_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod1_2_mae,mod1_2_mape, by=c("dp_range")), mod1_2_mase, by=c("dp_range"))
-
 ```
 
 ####__In Sample Model 2__
 ```{r}
 h1_train$predict_cxl_rate <-  predict(mod1_2, h1_train, se.fit=TRUE)$fit
 h1_train$fcst_svv <- h1_train$OTB - h1_train$OTB * h1_train$predict_cxl_rate
-
 # MAE
 mod1_2_mae <- h1_train %>% 
   filter(days_prior!=0) %>% 
@@ -531,7 +585,6 @@ mod1_2_mae <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_2_mape <- h1_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -541,9 +594,7 @@ mod1_2_mape <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_2_mase <- h1_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -555,10 +606,8 @@ mod1_2_mase <- h1_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod1_2_mae,mod1_2_mape, by=c("dp_range")), mod1_2_mase, by=c("dp_range"))
-
 ```
 
 ###__mod1_3__
@@ -575,7 +624,6 @@ mod1_3_mae <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_3_mape <- h1_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -585,9 +633,7 @@ mod1_3_mape <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_3_mase <- h1_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -599,10 +645,8 @@ mod1_3_mase <- h1_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod1_3_mae,mod1_3_mape, by=c("dp_range")), mod1_3_mase, by=c("dp_range"))
-
 ```
 ####__In Sample Model 3__
 ```{r}
@@ -618,7 +662,6 @@ mod1_3_mae <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_3_mape <- h1_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -628,9 +671,7 @@ mod1_3_mape <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_3_mase <- h1_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -642,10 +683,8 @@ mod1_3_mase <- h1_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod1_3_mae,mod1_3_mape, by=c("dp_range")), mod1_3_mase, by=c("dp_range"))
-
 ```
 
 ###__mod1_4__
@@ -662,7 +701,6 @@ mod1_4_mae <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_4_mape <- h1_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -672,9 +710,7 @@ mod1_4_mape <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_4_mase <- h1_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -686,10 +722,8 @@ mod1_4_mase <- h1_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_4
 left_join(left_join(mod1_4_mae,mod1_4_mape, by=c("dp_range")), mod1_4_mase, by=c("dp_range"))
-
 ```
 
 ####__In Sample Model 4__
@@ -706,7 +740,6 @@ mod1_4_mae <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_4_mape <- h1_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -716,9 +749,7 @@ mod1_4_mape <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_4_mase <- h1_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -730,10 +761,8 @@ mod1_4_mase <- h1_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_4
 left_join(left_join(mod1_4_mae,mod1_4_mape, by=c("dp_range")), mod1_4_mase, by=c("dp_range"))
-
 ```
 
 
@@ -751,7 +780,6 @@ mod1_5_mae <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_5_mape <- h1_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -761,9 +789,7 @@ mod1_5_mape <- h1_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_5_mase <- h1_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -775,10 +801,8 @@ mod1_5_mase <- h1_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod1_5_mae,mod1_5_mape, by=c("dp_range")), mod1_5_mase, by=c("dp_range"))
-
 ```
 
 ####__In Sample Model 5__
@@ -795,7 +819,6 @@ mod1_5_mae <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod1_5_mape <- h1_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -805,9 +828,7 @@ mod1_5_mape <- h1_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 mod1_5_mase <- h1_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -819,21 +840,146 @@ mod1_5_mase <- h1_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod1_5_mae,mod1_5_mape, by=c("dp_range")), mod1_5_mase, by=c("dp_range"))
+```
+###__mod1_6__
+```{r}
+h1_test$predict_cxl_rate <-  exp(predict(mod1_6, h1_test, se.fit=TRUE)$fit)
+h1_test$fcst_svv <- h1_test$OTB - h1_test$OTB * h1_test$predict_cxl_rate
+# MAE
+mod1_6_mae <- h1_test %>% 
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+mod1_6_mape <- h1_test %>%  
+  filter(days_prior!=0, OTB_to_survive!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
+avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
+mod1_6_mase <- h1_test %>%  
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32'),
+         abs_diff_1=abs(OTB_to_survive-fcst_svv),
+         abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
+# MAE, MAPE, MASE for mod1_3
+left_join(left_join(mod1_6_mae,mod1_6_mape, by=c("dp_range")), mod1_6_mase, by=c("dp_range"))
+```
+- way worse error numbers compared to taking the log function
 
+###__mod1_7__
+```{r}
+h1_test<- h1_test %>% mutate(perc_group_opfenc = case_when(prod_group_perc == 'OP/FENC' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_corpbus = case_when(prod_group_perc == 'CORP/BUS' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_group = case_when(prod_group_perc == 'GROUP' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_memoth = case_when(prod_group_perc == 'MEM/OTHER' ~ '1',
+                                                    TRUE ~ '0'),
+                                perc_group_govunf = case_when(prod_group_perc == 'GOV/UNFENC' ~ '1',
+                                                    TRUE ~ '0'))
+
+h1_test$predict_cxl_rate <-  exp(predict(mod1_7, h1_test, se.fit=TRUE)$fit)
+h1_test$fcst_svv <- h1_test$OTB - h1_test$OTB * h1_test$predict_cxl_rate
+# MAE
+mod1_7_mae <- h1_test %>% 
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+mod1_7_mape <- h1_test %>%  
+  filter(days_prior!=0, OTB_to_survive!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
+avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
+mod1_7_mase <- h1_test %>%  
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32'),
+         abs_diff_1=abs(OTB_to_survive-fcst_svv),
+         abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
+# MAE, MAPE, MASE for mod1_3
+left_join(left_join(mod1_7_mae,mod1_7_mape, by=c("dp_range")), mod1_7_mase, by=c("dp_range"))
+```
+- still terrible results
+- log definitely gives best results
+
+###__mod1_8__
+```{r}
+h1_test$predict_cxl_rate <-  exp(predict(mod1_8, h1_test, se.fit=TRUE)$fit)
+h1_test$fcst_svv <- h1_test$OTB - h1_test$OTB * h1_test$predict_cxl_rate
+# MAE
+mod1_8_mae <- h1_test %>% 
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+mod1_8_mape <- h1_test %>%  
+  filter(days_prior!=0, OTB_to_survive!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
+avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
+mod1_8_mase <- h1_test %>%  
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32'),
+         abs_diff_1=abs(OTB_to_survive-fcst_svv),
+         abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
+# MAE, MAPE, MASE for mod1_3
+left_join(left_join(mod1_8_mae,mod1_8_mape, by=c("dp_range")), mod1_8_mase, by=c("dp_range"))
 ```
 
 ##__Hotel 2__
 ###__mod2_1__
 ```{r}
 h2_test <- hot2[hot2$stay_dt > (max(hot2$stay_dt) - 21),]
-
 h2_test$predict_cxl_rate <-  predict(mod2_1, h2_test, se.fit=TRUE)$fit
-
 h2_test$fcst_svv <- h2_test$OTB - h2_test$OTB * h2_test$predict_cxl_rate
-
 ```
 
 ```{r}
@@ -847,7 +993,6 @@ mod2_1_mae <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 # MAPE: the OTB_to_survive in GOVERNMENT contains 0 values, so MAPE is INF
 mod2_1_mape <- h2_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
@@ -858,9 +1003,7 @@ mod2_1_mape <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_1_mase <- h2_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -872,7 +1015,6 @@ mod2_1_mase <- h2_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod2_1_mae,mod2_1_mape, by=c("dp_range")), mod2_1_mase, by=c("dp_range"))
 ```
@@ -880,9 +1022,7 @@ left_join(left_join(mod2_1_mae,mod2_1_mape, by=c("dp_range")), mod2_1_mase, by=c
 ###__In Sample Model 1__
 ```{r}
 h2_train$predict_cxl_rate <-  predict(mod2_1, h2_train, se.fit=TRUE)$fit
-
 h2_train$fcst_svv <- h2_train$OTB - h2_train$OTB * h2_train$predict_cxl_rate
-
 # MAE
 mod2_1_mae <- h2_train %>% 
   filter(days_prior!=0) %>% 
@@ -893,7 +1033,6 @@ mod2_1_mae <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 # MAPE: the OTB_to_survive in GOVERNMENT contains 0 values, so MAPE is INF
 mod2_1_mape <- h2_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
@@ -904,9 +1043,7 @@ mod2_1_mape <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_1_mase <- h2_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -918,7 +1055,6 @@ mod2_1_mase <- h2_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod2_1_mae,mod2_1_mape, by=c("dp_range")), mod2_1_mase, by=c("dp_range"))
 ```
@@ -927,7 +1063,6 @@ left_join(left_join(mod2_1_mae,mod2_1_mape, by=c("dp_range")), mod2_1_mase, by=c
 ```{r}
 h2_test$predict_cxl_rate <-  predict(mod2_2, h2_test, se.fit=TRUE)$fit
 h2_test$fcst_svv <- h2_test$OTB - h2_test$OTB * h1_test$predict_cxl_rate
-
 # MAE
 mod2_2_mae <- h2_test %>% 
   filter(days_prior!=0) %>% 
@@ -938,7 +1073,6 @@ mod2_2_mae <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_2_mape <- h2_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -948,9 +1082,7 @@ mod2_2_mape <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_2_mase <- h2_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -962,16 +1094,13 @@ mod2_2_mase <- h2_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod2_2_mae,mod2_2_mape, by=c("dp_range")), mod2_2_mase, by=c("dp_range"))
-
 ```
 ####__In Sample Model 2__
 ```{r}
 h2_train$predict_cxl_rate <-  predict(mod2_2, h2_train, se.fit=TRUE)$fit
 h2_train$fcst_svv <- h2_train$OTB - h2_train$OTB * h1_test$predict_cxl_rate
-
 # MAE
 mod2_2_mae <- h2_train %>% 
   filter(days_prior!=0) %>% 
@@ -982,7 +1111,6 @@ mod2_2_mae <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_2_mape <- h2_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -992,9 +1120,7 @@ mod2_2_mape <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_2_mase <- h2_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1006,10 +1132,8 @@ mod2_2_mase <- h2_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_1
 left_join(left_join(mod2_2_mae,mod2_2_mape, by=c("dp_range")), mod2_2_mase, by=c("dp_range"))
-
 ```
 
 
@@ -1027,7 +1151,6 @@ mod2_3_mae <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_3_mape <- h2_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1037,9 +1160,7 @@ mod2_3_mape <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_3_mase <- h2_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1051,10 +1172,8 @@ mod2_3_mase <- h2_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod2_3_mae,mod2_3_mape, by=c("dp_range")), mod2_3_mase, by=c("dp_range"))
-
 ```
 
 ####__In Sample Model 3__
@@ -1071,7 +1190,6 @@ mod2_3_mae <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_3_mape <- h2_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1081,9 +1199,7 @@ mod2_3_mape <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_3_mase <- h2_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1095,10 +1211,8 @@ mod2_3_mase <- h2_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod2_3_mae,mod2_3_mape, by=c("dp_range")), mod2_3_mase, by=c("dp_range"))
-
 ```
 
 ###__mod2_4__
@@ -1115,7 +1229,6 @@ mod2_4_mae <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_4_mape <- h2_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1125,9 +1238,7 @@ mod2_4_mape <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_4_mase <- h2_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1139,10 +1250,8 @@ mod2_4_mase <- h2_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_4
 left_join(left_join(mod2_4_mae,mod2_4_mape, by=c("dp_range")), mod2_4_mase, by=c("dp_range"))
-
 ```
 
 ###&__In Sample Model 4__
@@ -1159,7 +1268,6 @@ mod2_4_mae <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_4_mape <- h2_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1169,9 +1277,7 @@ mod2_4_mape <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_4_mase <- h2_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1183,10 +1289,8 @@ mod2_4_mase <- h2_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_4
 left_join(left_join(mod2_4_mae,mod2_4_mape, by=c("dp_range")), mod2_4_mase, by=c("dp_range"))
-
 ```
 
 ###__mod2_5__
@@ -1203,7 +1307,6 @@ mod2_5_mae <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_5_mape <- h2_test %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1213,9 +1316,7 @@ mod2_5_mape <- h2_test %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_5_mase <- h2_test %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1227,10 +1328,8 @@ mod2_5_mase <- h2_test %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod2_5_mae,mod2_5_mape, by=c("dp_range")), mod2_5_mase, by=c("dp_range"))
-
 ```
 
 ####__In Sample Model 5__
@@ -1247,7 +1346,6 @@ mod2_5_mae <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAE = mae(OTB_to_survive, fcst_svv))
-
 mod2_5_mape <- h2_train %>%  
   filter(days_prior!=0, OTB_to_survive!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1257,9 +1355,7 @@ mod2_5_mape <- h2_train %>%
                                   days_prior >=29 ~ '29_32')) %>% 
   group_by(dp_range) %>% 
   summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
-
 avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
-
 mod2_5_mase <- h2_train %>%  
   filter(days_prior!=0) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -1271,11 +1367,52 @@ mod2_5_mase <- h2_train %>%
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
   group_by(dp_range) %>% 
   summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-
 # MAE, MAPE, MASE for mod1_3
 left_join(left_join(mod2_5_mae,mod2_5_mape, by=c("dp_range")), mod2_5_mase, by=c("dp_range"))
+```
 
+###__mod2_6__
+```{r}
+h2_test$predict_cxl_rate <-  exp(predict(mod2_6, h2_test, se.fit=TRUE)$fit)
+h2_test$fcst_svv <- h2_test$OTB - h2_test$OTB * h2_test$predict_cxl_rate
+# MAE
+mod2_6_mae <- h2_test %>% 
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+mod2_6_mape <- h2_test %>%  
+  filter(days_prior!=0, OTB_to_survive!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
+avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
+mod2_6_mase <- h2_test %>%  
+  filter(days_prior!=0) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32'),
+         abs_diff_1=abs(OTB_to_survive-fcst_svv),
+         abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
+  group_by(dp_range) %>% 
+  summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
+# MAE, MAPE, MASE for mod1_3
+left_join(left_join(mod2_6_mae,mod2_6_mape, by=c("dp_range")), mod2_6_mase, by=c("dp_range"))
 ```
 
 
+
+```{r}
+save.image(file = "my_env.RData")
+```
 
