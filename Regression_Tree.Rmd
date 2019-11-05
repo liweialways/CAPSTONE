@@ -36,6 +36,7 @@ library(directlabels)
 library(Metrics)
 library(tree)
 library(ISLR)
+library(MASS)
 ```
 
 ```{r message = FALSE, echo = FALSE, error = FALSE}
@@ -139,16 +140,134 @@ hot2 <- hot2 %>%
                                                  TRUE ~ "MON/TUE/WED/THU")))
 h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
 h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
+
+
+
+h1_test <- hot1[hot1$stay_dt > (max(hot1$stay_dt) - 21),]
+h2_test <- hot2[hot2$stay_dt > (max(hot2$stay_dt) - 21),]
+
+# For MASE, use the average survival (= average survival rate of all training data * OTB) as the naive forecast.
+avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
+
 ```
 
+```{r}
+# Function to get MAE, MAPE, MASE
+eval <- function(test){
+  test$fcst_svv <- test$OTB - test$OTB * test$predict_cxl_rate
+  tst_mae <- test %>% 
+    filter(days_prior!=0) %>% 
+    mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+    group_by(dp_range) %>% 
+    summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+  tst_mape <- test %>%  
+    filter(OTB_to_survive!=0, days_prior!=0) %>% 
+    mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32')) %>% 
+    group_by(dp_range) %>% 
+    summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
+  tst_mase <- test %>%  
+    filter(days_prior!=0) %>% 
+    mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32'),
+         abs_diff_1=abs(OTB_to_survive-fcst_svv),
+         abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
+    group_by(dp_range) %>% 
+    summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
+  left_join(left_join(tst_mae,tst_mape, by=c("dp_range")), tst_mase, by=c("dp_range"))
+}
+
+```
 
 #__Decision Tree Models__
 ##__Hotel 1__
+
+```{r}
+h1_train <- h1_train %>%
+  select(-c(OTB_to_be_cxl, OTB_to_survive, OTB_rev_to_be_cxl, OTB_rev_to_survive))
+```
+
 
 ```{r}
 first_tree = tree(OTB_cxl_rate ~., data = h1_train)
 summary(first_tree)
 plot(first_tree)
 text(first_tree, pretty = 0)
+first_tree
+h1_test$predict_cxl_rate <-  predict(first_tree, h1_test)
+eval(h1_test)
 ```
 
+- only prod group perc was the only grouping used
+
+
+```{r}
+set.seed(18)
+first_tree_cv = cv.tree(first_tree)
+plot(first_tree_cv$size, sqrt(first_tree_cv$dev / nrow(h1_train)), type = "b",
+     xlab = "Tree Size", ylab = "CV-RMSE")
+```
+- 10 through 12 has best RMSE so prune to 10 for interpretability
+
+
+```{r}
+pruned_tree_1 <- prune.tree(first_tree, best=10)
+plot(pruned_tree_1 )
+text(first_tree, pretty = 0)
+h1_test$predict_cxl_rate <-  predict(pruned_tree_1, h1_test)
+eval(h1_test)
+```
+
+```{r}
+pruned_tree_2 <- prune.tree(first_tree, best=12)
+plot(pruned_tree_1 )
+text(first_tree, pretty = 0)
+h1_test$predict_cxl_rate <-  predict(pruned_tree_2, h1_test)
+eval(h1_test)
+
+h1_train$predict_cxl_rate <-  predict(pruned_tree_2, h1_train)
+eval(h1_train)
+```
+
+- best = 12 still has best error numbers
+
+
+
+
+##__Hotel 2__
+
+```{r}
+h2_train <- h2_train %>%
+  select(-c(OTB_to_be_cxl, OTB_to_survive, OTB_rev_to_be_cxl, OTB_rev_to_survive))
+
+avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
+```
+
+
+```{r}
+first_tree = tree(OTB_cxl_rate ~., data = h2_train)
+summary(first_tree)
+plot(first_tree)
+text(first_tree, pretty = 0)
+first_tree
+h2_test$predict_cxl_rate <-  predict(first_tree, h2_test)
+eval(h2_test)
+```
+
+
+```{r}
+set.seed(18)
+first_tree_cv = cv.tree(first_tree)
+plot(first_tree_cv$size, sqrt(first_tree_cv$dev / nrow(h1_train)), type = "b",
+     xlab = "Tree Size", ylab = "CV-RMSE")
+```
