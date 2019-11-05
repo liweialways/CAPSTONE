@@ -149,7 +149,8 @@ hot1 <- hot1 %>%
          regrp_type = case_when(product_type == 'BUSINESS TRAVEL AGENCIES' ~ 1,
                                          product_type == 'MEMBERSHIP MARKETING' ~ 1,
                                          product_type == 'OTHER' ~ 1,
-                                         TRUE ~ 0))
+                                         TRUE ~ 0)) %>% 
+  filter(!is.na(price), !is.na(daily_cxl_rev), !is.na(cummulative_cxl_rev))
  
 h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
 
@@ -161,6 +162,7 @@ avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
 
 nrow(h1_train)
 nrow(h1_test)
+
 ```
 
 ##__KNN__
@@ -177,8 +179,13 @@ h1_trn_y <- as.data.frame(h1_train["OTB_cxl_rate"])
 h1_tst_x <- as.data.frame(h1_test[, names(h1_test) %in% keep_var])
 h1_tst_y <- as.data.frame(h1_test["OTB_cxl_rate"])
 
-h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst_x), y = h1_trn_y, k = 40)$pred
-# k = 1, 2, ..., 40, 50, it seems like K=40 has generally better results. 
+h1_train$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_trn_x), y = h1_trn_y, k = 20)$pred
+h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst_x), y = h1_trn_y, k = 20)$pred
+# k = 1, 2, ..., 40, 50, it seems like K=20 has generally better results. 
+
+# In sample performance
+eval(h1_train)
+# Test dataset performance
 eval(h1_test)
 ```
 
@@ -195,10 +202,16 @@ h1_trn_y <- as.data.frame(h1_train["OTB_cxl_rate"])
 h1_tst_x <- as.data.frame(h1_test[, names(h1_test) %in% keep_var])
 h1_tst_y <- as.data.frame(h1_test["OTB_cxl_rate"])
 
-h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst_x), y = h1_trn_y, k = 40)$pred
-# k = 1, 2, ..., 40, 50, it seems like K=40 has generally better results. 
+h1_train$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_trn_x), y = h1_trn_y, k = 80)$pred
+h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst_x), y = h1_trn_y, k = 80)$pred
+# k = 1, 2, ..., 40, 50, it seems like K=80 has generally balanced results
+
+# In sample performance
+eval(h1_train)
+# Test dataset performance
 eval(h1_test)
 ```
+
 
 ###__Variable selection 3__
 ```{r}
@@ -212,52 +225,17 @@ h1_trn_y <- as.data.frame(h1_train["OTB_cxl_rate"])
 h1_tst_x <- as.data.frame(h1_test[, names(h1_test) %in% keep_var])
 h1_tst_y <- as.data.frame(h1_test["OTB_cxl_rate"])
 
-h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst_x), y = h1_trn_y, k = 40)$pred
-# k = 1, 2, ..., 40, 50, it seems like K=40 has generally better results. 
+h1_train$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_trn_x), y = h1_trn_y, k = 50)$pred
+h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst_x), y = h1_trn_y, k = 50)$pred
+# k = 1, 2, ..., 40, 50, it seems like K=50 has generally balanced results
+
+# In sample performance
+eval(h1_train)
+# Test dataset performance
 eval(h1_test)
 ```
 
 
-
-
-##__Hide
-```{r}
-hot2 <- hot2 %>% 
-  filter(OTB!=0, days_prior<32) %>% 
-  mutate(price=OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB,
-         day_type = as.factor(case_when(day_of_week == '7' ~ 'weekend',
-                              day_of_week == '1' ~ 'weekend', 
-                              TRUE ~'weekday')),
-         month = as.factor(month(stay_dt)),
-         prod_group_perc = as.factor(case_when(product_type == 'OPAQUE' ~ 'OP/FENC/OTH',
-                                         product_type == 'FENCED' ~ 'OP/FENC/OTH',
-                                         product_type == 'CORPORATE' ~ 'CORP/GROUP/TACT',
-                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'UNF/WHOLE/MEM/BUS',
-                                         product_type == 'GROUP' ~ 'CORP/GROUP/TACT',
-                                         product_type == 'TACTICAL MARKETING' ~ 'CORP/GROUP/TACT',
-                                         product_type == 'MEMBERSHIP MARKETING' ~ 'UNF/WHOLE/MEM/BUS',
-                                         product_type == 'OTHER' ~ 'OP/FENC/OTH',
-                                         product_type == 'UNFENCED' ~ 'UNF/WHOLE/MEM/BUS',
-                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
-                                         product_type == 'WHOLESALE' ~ 'UNF/WHOLE/MEM/BUS')),
-         prod_group_behav = as.factor(case_when(product_type == 'OPAQUE' ~ 'OTH/OPA/FEN',
-                                         product_type == 'FENCED' ~ 'OTH/OPA/FEN',
-                                         product_type == 'CORPORATE' ~ 'CORP/MEMB/WHOLE',
-                                         product_type == 'BUSINESS TRAVEL AGENCIES' ~ 'BTA/UNFEN/CORP/MM',
-                                         product_type == 'GROUP' ~ 'GROUP',
-                                         product_type == 'TACTICAL MARKETING' ~ 'TACT/WHOLE',
-                                         product_type == 'MEMBERSHIP MARKETING' ~ 'BTA/UNFEN/CORP/MM',
-                                         product_type == 'OTHER' ~ 'OTH/OPA/FEN',
-                                         product_type == 'UNFENCED' ~ 'BTA/UNFEN/CORP/MM',
-                                         product_type == 'GOVERNMENT' ~ 'GOVERNMENT',
-                                         product_type == 'WHOLESALE' ~ 'TACT/WHOLE')),
-         day_type_cxl_rate = as.factor(case_when(day_of_week=="1"~"SUN", 
-                                                 day_of_week=="6"~"FRI/SAT",
-                                                 day_of_week=="7"~"FRI/SAT",
-                                                 TRUE ~ "MON/TUE/WED/THU")))
-h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
-h2_test <- hot2[hot2$stay_dt > (max(hot2$stay_dt) - 21),]
-```
 
 #__Hotel 2__
 ```{r}
@@ -336,8 +314,13 @@ h2_trn_y <- as.data.frame(h2_train["OTB_cxl_rate"])
 h2_tst_x <- as.data.frame(h2_test[, names(h2_test) %in% keep_var])
 h2_tst_y <- as.data.frame(h2_test["OTB_cxl_rate"])
 
-h2_test$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_tst_x), y = h2_trn_y, k = 50)$pred
-# k = 1, 2, ..., 40, 50, it seems like K=50 has generally better results. 
+h2_train$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_trn_x), y = h2_trn_y, k = 80)$pred
+h2_test$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_tst_x), y = h2_trn_y, k = 80)$pred
+# k = 1, 2, ..., 40, 50, it seems like K=80 has generally balanced results
+
+# In sample performance
+eval(h2_train)
+# Test dataset performance
 eval(h2_test)
 ```
 
@@ -354,27 +337,16 @@ h2_trn_y <- as.data.frame(h2_train["OTB_cxl_rate"])
 h2_tst_x <- as.data.frame(h2_test[, names(h2_test) %in% keep_var])
 h2_tst_y <- as.data.frame(h2_test["OTB_cxl_rate"])
 
-h2_test$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_tst_x), y = h2_trn_y, k = 50)$pred
-# k = 1, 2, ..., 40, 50, it seems like K=40 has generally better results. 
+h2_train$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_trn_x), y = h2_trn_y, k = 80)$pred
+h2_test$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_tst_x), y = h2_trn_y, k = 80)$pred
+# k = 1, 2, ..., 40, 50, it seems like K=80 has generally balanced results
+
+# In sample performance
+eval(h2_train)
+# Test dataset performance
 eval(h2_test)
 ```
 
-###__Variable selection 3__
-```{r}
-# variables:"days_prior", "day_type", "regrp_type", "price", "cummulative_gross_bookings", "cummulative_cxl_rev"
-# the combination of cum_gross_bk and cum_cxl_rev is better than cum_gross_bk and cum_cxl_bk
-keep_var = c("days_prior", "day_type", "regrp_type", "price", "cummulative_gross_bookings", "cummulative_cxl_rev")
-
-h2_trn_x <- as.data.frame(h2_train[, names(h2_train) %in% keep_var])
-h2_trn_y <- as.data.frame(h2_train["OTB_cxl_rate"])
-
-h2_tst_x <- as.data.frame(h2_test[, names(h2_test) %in% keep_var])
-h2_tst_y <- as.data.frame(h2_test["OTB_cxl_rate"])
-
-h2_test$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_tst_x), y = h2_trn_y, k = 40)$pred
-# k = 1, 2, ..., 40, 50, it seems like K=40 has generally better results. 
-eval(h2_test)
-```
 
 
 
