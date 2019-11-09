@@ -16,9 +16,9 @@ output:
 #__Get Data Ready__
 ```{r message = FALSE, echo = FALSE, error = FALSE}
 # Clear environment of variables and functions
-rm(list = ls(all = TRUE)) 
+#rm(list = ls(all = TRUE)) 
 # Clear environmet of packages
-if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+#if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), #sep=""), detach, character.only = TRUE, unload = TRUE)
 ```
 
 ```{r message = FALSE, echo = FALSE, error = FALSE}
@@ -26,17 +26,19 @@ library(tidyverse)
 library(dplyr) # joins
 #library(janitor) # pretty cross-tabs
 library(kableExtra) # pretty html tables
-library(formattable)
-library(gridExtra)
-library(scales)
-library(pastecs)
-library(GGally)
+#library(formattable)
+#library(gridExtra)
+#library(scales)
+#library(pastecs)
+#library(GGally)
 library(lubridate)
-library(directlabels)
-library(Metrics)
+#library(directlabels)
+#library(Metrics)
 library(tree)
 library(ISLR)
 library(MASS)
+library(rpart)
+
 ```
 
 ```{r message = FALSE, echo = FALSE, error = FALSE}
@@ -48,7 +50,6 @@ options(scipen=999)
 # load the data files
 hot1 <- read_csv('BOOKINGS_ATLCP.csv')
 hot2 <- read_csv('BOOKINGS_NYCHA.csv')
-
 ```
 
 ```{r}
@@ -57,7 +58,6 @@ hot1$stay_dt <- as.Date(hot1$stay_dt, "%m/%d/%Y")
 hot1$booking_dt <- as.Date(hot1$booking_dt, "%m/%d/%Y")
 hot2$stay_dt <- as.Date(hot2$stay_dt, "%m/%d/%Y")
 hot2$booking_dt <- as.Date(hot2$booking_dt, "%m/%d/%Y")
-
 #create field for non-numerical dow
 hot1$day_of_week <- as.factor(hot1$dow)
 hot2$day_of_week <- as.factor(hot2$dow)
@@ -104,7 +104,6 @@ hot1 <- hot1 %>%
                                                  day_of_week=="6"~"FRI/SAT",
                                                  day_of_week=="7"~"FRI/SAT",
                                                  TRUE ~ "MON/TUE/WED/THU")))
-
 hot2 <- hot2 %>% 
   filter(OTB!=0, days_prior<32) %>% 
   mutate(price=OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB,
@@ -140,15 +139,10 @@ hot2 <- hot2 %>%
                                                  TRUE ~ "MON/TUE/WED/THU")))
 h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
 h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
-
-
-
 h1_test <- hot1[hot1$stay_dt > (max(hot1$stay_dt) - 21),]
 h2_test <- hot2[hot2$stay_dt > (max(hot2$stay_dt) - 21),]
-
 # For MASE, use the average survival (= average survival rate of all training data * OTB) as the naive forecast.
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
 ```
 
 ```{r}
@@ -186,26 +180,28 @@ eval <- function(test){
     summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
   left_join(left_join(tst_mae,tst_mape, by=c("dp_range")), tst_mase, by=c("dp_range"))
 }
-
 ```
 
 #__Decision Tree Models__
 ##__Hotel 1__
 
 ```{r}
-h1_train <- h1_train %>%
-  select(-c(OTB_to_be_cxl, OTB_to_survive, OTB_rev_to_be_cxl, OTB_rev_to_survive))
+h1_train_1 <- h1_train[,-which(names(h1_train) %in% c('OTB_to_be_cxl', 'OTB_to_survive', 'OTB_rev_to_be_cxl', 'OTB_rev_to_survive', 'daily_gross_rev', 'daily_cxl_rev', 'daily_net_rev', 'cummulative_gross_rev', 'cummulative_cxl_rev', 'OTB_rev', 'month'))]
 ```
 
 
 ```{r}
-first_tree = tree(OTB_cxl_rate ~., data = h1_train)
+first_tree <-  tree(OTB_cxl_rate ~., data = h1_train_1)
 summary(first_tree)
 plot(first_tree)
 text(first_tree, pretty = 0)
 first_tree
 h1_test$predict_cxl_rate <-  predict(first_tree, h1_test)
-eval(h1_test)
+dt_best_1 <- eval(h1_test)
+h1_train$predict_cxl_rate <-  predict(first_tree, h1_train)
+eval(h1_train)
+
+
 ```
 
 - only prod group perc was the only grouping used
@@ -234,7 +230,6 @@ plot(pruned_tree_1 )
 text(first_tree, pretty = 0)
 h1_test$predict_cxl_rate <-  predict(pruned_tree_2, h1_test)
 eval(h1_test)
-
 h1_train$predict_cxl_rate <-  predict(pruned_tree_2, h1_train)
 eval(h1_train)
 ```
@@ -247,21 +242,20 @@ eval(h1_train)
 ##__Hotel 2__
 
 ```{r}
-h2_train <- h2_train %>%
-  select(-c(OTB_to_be_cxl, OTB_to_survive, OTB_rev_to_be_cxl, OTB_rev_to_survive))
-
-avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
+h2_train_1 <- h2_train[,-which(names(h1_train) %in% c('OTB_to_be_cxl', 'OTB_to_survive', 'OTB_rev_to_be_cxl', 'OTB_rev_to_survive', 'daily_gross_rev', 'daily_cxl_rev', 'daily_net_rev', 'cummulative_gross_rev', 'cummulative_cxl_rev', 'OTB_rev', 'month'))]
 ```
 
 
 ```{r}
-first_tree = tree(OTB_cxl_rate ~., data = h2_train)
-summary(first_tree)
-plot(first_tree)
-text(first_tree, pretty = 0)
-first_tree
-h2_test$predict_cxl_rate <-  predict(first_tree, h2_test)
-eval(h2_test)
+first_tree_2 = tree(OTB_cxl_rate ~., data = h2_train_1)
+summary(first_tree_2)
+plot(first_tree_2)
+text(first_tree_2, pretty = 0)
+first_tree_2
+h2_test$predict_cxl_rate <-  predict(first_tree_2, h2_test)
+dt_best_2 <- eval(h2_test)
+#h2_test$predict_cxl_rate <-  predict(first_tree_2, h2_train)
+#eval(h2_train)
 ```
 
 
@@ -271,3 +265,9 @@ first_tree_cv = cv.tree(first_tree)
 plot(first_tree_cv$size, sqrt(first_tree_cv$dev / nrow(h1_train)), type = "b",
      xlab = "Tree Size", ylab = "CV-RMSE")
 ```
+
+
+```{r}
+save.image("dt_env.Rdata")
+```
+

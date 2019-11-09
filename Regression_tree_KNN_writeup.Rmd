@@ -1,0 +1,110 @@
+---
+title: "Hotel Cancellation - KNN & Regression Tree Write UP"
+author: "Caitlin Howansky & Wei Li"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  word_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r, include=FALSE}
+# Run Linear Regression Rmd v2 first ###
+# load package
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(tidyverse) 
+library(dplyr) # joins
+#library(janitor) # pretty cross-tabs
+library(kableExtra) # pretty html tables
+#library(formattable)
+#library(gridExtra)
+#library(scales)
+#library(pastecs)
+#library(GGally)
+#library(lubridate)
+#library(directlabels)
+#library(Metrics)
+library(tree)
+library(ISLR)
+load('env.RData')
+load("dt_env.Rdata")
+```
+
+```{r}
+#Run KNN and Regression Tree file before running this report
+```
+
+##__Atlanta Hotel__
+
+###__KNN__
+```{r}
+hotel1_best %>%
+  arrange(meanASE) %>%
+  kable(col.names = c("Days Prior", "MAE", "MAPE", "MASE")) %>%
+  kable_styling(bootstrap_options = c("condensed", "striped", "bordered")) %>%
+  add_header_above(c("KNN - Atlanta Hotel" = 4))
+```
+
+The next model that was run was K-means Nearest Neighbor regression model. OUr hypothesis was that this would be the best method run so far; however, that was not the case. When comparing to the Naive model, every days prior grouping performed better than this KNN model. When comparing to the log-linear regression model, KNN still performs worse in every days prior grouping. However, KNN performs very similarly to the log-linear model in days 22-32. KNN performing well means that the cancellation rate is not easily separable by groups given the parameters we are using. Reasons for this could be volitile data that changes for no forseeable reason. 
+
+
+###__Regression Tree__
+```{r, fig.height=8,fig.width= 13}
+plot(first_tree)
+text(first_tree, pretty = 0)
+
+dt_best_1 %>%
+  arrange(meanASE) %>%
+  kable(col.names = c("Days Prior", "MAE", "MAPE", "MASE")) %>%
+  kable_styling(bootstrap_options = c("condensed", "striped", "bordered")) %>%
+  add_header_above(c("Regression Trees- Atlanta Hotel" = 4))
+```
+
+The regression tree model performed very similarly to the KNN model. However, the regression tree performed better than KNN in days 22-32. The regression tree performs best in the days closest to the stay date and when the stay date is greater than 29 days out. From the regression tree, you can see that the most important variable is whether or not the booking is an opaque or fenced booking. If it is one of these two, the cancellation rate is low, .02357. The next most important variable is the cummulative gross bookings. This makes sense as the higher the gross bookings are the higher the possibilities of rooms that could be cancelled. One surprising thing in this regression tree is how low days prior is in the tree. A main reason for this is there is a correlation between cummulative gross bookings and days prior. The closer the hotel is to the stay date, the more cummulative bookings they should have. Another variable that shows up a lot is price. Although counterintuitive, in some places in this model, the lower the price is, the lower the cancellation rate is. This could be due to the fact that the hotel has put on a promotion close to the stay data. 
+
+##__NY Hotel__
+
+###__KNN__
+
+```{r, fig.height=9, fig.width= 13}
+hotel2_best %>%
+  arrange(meanAE) %>%
+  kable(col.names = c("Days Prior", "MAE", "MAPE", "MASE")) %>%
+  kable_styling(bootstrap_options = c("condensed", "striped", "bordered")) %>%
+  add_header_above(c("KNN - New York Hotel" = 4))
+```
+
+
+For the New York Hotel, KNN performed better when compared to the Atlanta hotel. There are many reasons that this could be the case. One of them being the fact that most product type groups behave in a very similar trend; this is not the case at the Atlanta hotel. Having similar trends means the data is not as volatile and can therefore be separated into average cancellation rate groups. While KNN performs better when compared to the Atlanta hotel; this is not the case for other models. The naive model performs better than KNN in every days prior grouping. Comparing this model to the log-linear model, KNN performs better when there is between 1 and 7 days before the stay date. A reason for this could be the data closer to the stay date follows a closer pattern than when there are bookings and cancellations further out. In all other cases, the log-linear model performs better. 
+
+
+###__Regression Tree__
+```{r, fig.height=15, fig.width=15}
+plot(first_tree_2)
+text(first_tree_2, pretty = 0)
+dt_best_2 %>%
+  arrange(meanAPE) %>%
+  kable(col.names = c("Days Prior", "MAE", "MAPE", "MASE")) %>%
+  kable_styling(bootstrap_options = c("condensed", "striped", "bordered")) %>%
+  add_header_above(c("Regression Tree - New York Hotel" = 4))
+```
+
+Like the KNN model, the regression tree for the New York hotel also performed better than the Atlanta hotel. However, for the New York Hotel, the regression tree model out performs the KNN model in every days prior group except days 1-7. This is the exact opposite of what happened in the Atlanta hotel. While this model performs better than the KNN model, it still does not perform better than the naive model in any days prior group. In this model, the most important variable is again a grouping of the product type; however, this model uses the grouping based on cancellation rates. The next most important variable is OTB, which is the number of bookings on the book. This is correlated to cummulative gross bookings which was the second highest splitting variable in the Atlanta model. However, this number OTB splits on is 1.5, meaning you only go to the left side if there is only 1 booking. This is not often the case and only occurs far out from the stay date. For this reason, the left side of the tree are very specific cases. The next splitting variable on the right side of the tree is days prior. If the days prior is 6 or lower than the cancellation rate is about 4%. Since there are no other circumstances, this is probably why the regression tree performs better when the days prior is greater than 7. In this model, day of week is also a splitting variable in a few places in the tree. On the right side of the table it splits on the fact if it is a Saturday or not. This tree shows that if it is a Saturday, the cancellation rate performs differently. 
+
+
+
+
+
