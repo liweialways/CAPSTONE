@@ -184,7 +184,7 @@ h1_test$predict_cxl_rate <- knn.reg(train = scale(h1_trn_x), test = scale(h1_tst
 # k = 1, 2, ..., 40, 50, it seems like K=20 has generally better results. 
 
 # In sample performance
-eval(h1_train)
+hotel1_best <- eval(h1_train)
 # Test dataset performance
 eval(h1_test)
 ```
@@ -319,7 +319,7 @@ h2_test$predict_cxl_rate <- knn.reg(train = scale(h2_trn_x), test = scale(h2_tst
 # k = 1, 2, ..., 40, 50, it seems like K=80 has generally balanced results
 
 # In sample performance
-eval(h2_train)
+hotel2_best <- eval(h2_train)
 # Test dataset performance
 eval(h2_test)
 ```
@@ -347,6 +347,9 @@ eval(h2_train)
 eval(h2_test)
 ```
 
+```{r}
+save.image(file = "env.RData")
+```
 
 
 
