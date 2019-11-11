@@ -36,7 +36,7 @@ library(directlabels)
 library(Metrics)
 library(FNN)
 library(MASS)
-library(neuralnet)
+#library(neuralnet)
 ```
 
 ```{r message = FALSE, echo = FALSE, error = FALSE}
@@ -76,6 +76,8 @@ eval <- function(test){
                                   days_prior >=29 ~ '29_32')) %>% 
     group_by(dp_range) %>% 
     summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+  
+  
   tst_mape <- test %>%  
     filter(OTB_to_survive!=0, days_prior!=0) %>% 
     mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -104,12 +106,8 @@ eval <- function(test){
 ```
 
 #__Hotel 1__
-```{r}
-summary(hot1)
-```
 
-
-##__Regroup day_of_week & product_type into 2-3 groups__
+##__Regroup day_of_week & product_type 
 
 
 + According to the cxl curve, regroup the 7 days into 2 groups: 1,6,7 (1) and 2,3,4,5 (0)
@@ -125,7 +123,7 @@ summary(hot1)
 ```{r}
 # filter OTB=0, truncate the data by dp, add price, otb_cxl_rate, regrp_type, month, regrouping tags to the dataset
 # day_type = 1: 'FRI/SAT/SUN'; = 0:'MON/TUE/WED/THU';
-# regrp_type = 1: 'MEM/OTHER/BUS'; =0:'CORP/UNF/GRP/GOV/OP/FENC'
+
 hot1 <- hot1 %>% 
   filter(OTB!=0, days_prior<33) %>% 
   mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -169,16 +167,72 @@ write.csv(h1_test, "h1_test.csv")
 
 # For MASE, use the average survival (= average survival rate of all training data * OTB) as the naive forecast.
 avg_svv_rt <- sum(h1_train$OTB_to_survive)/sum(h1_train$OTB)
-
+avg_svv_rt
 ```
 
-##__ANN__
-###__Variable selection 1__
+##########################
+
+#__Hotel 2__
+
+##__Regroup day_of_week & product_type 
+
++ According to the cxl curve, regroup the 7 days into 2 groups: 1,6,7 (1) and 2,3,4,5 (0)
+
++ Recode the product types into 4 binary columns
+
+  - 'OP_FENC_OTH':0 / 1
+  - 'CORP_GROUP_TACT':0 / 1
+  - 'UNF_WHOLE_MEM_BUS':0 / 1
+  - 'GOVERNMENT':0 / 1
+  
 ```{r}
-h1_train <- read_csv('a_1_trn.csv')
-h1_test <- read_csv('a_1_tst.csv')
+# filter OTB=0, truncate the data by dp, add price, otb_cxl_rate, regrp_type, month, regrouping tags to the dataset
+# day_type = 1: 'FRI/SAT/SUN'; = 0:'MON/TUE/WED/THU';
 
-eval(h1_train)
-eval(h1_test)
+hot2 <- hot2 %>% 
+  filter(OTB!=0, days_prior<32) %>% 
+  mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+                                  days_prior >=29 ~ '29_32'),
+         price=OTB_rev/OTB, OTB_cxl_rate = OTB_to_be_cxl/OTB,
+         day_type = case_when(day_of_week == '7' ~ 1,
+                              day_of_week == '1' ~ 1, 
+                              day_of_week == '6' ~ 1, 
+                              TRUE ~ 0),
+         OP_FENC_OTH = case_when(product_type == 'OPAQUE' ~ 1,
+                             product_type == 'FENCED' ~ 1,
+                             product_type == 'OTHER' ~ 1,
+                             TRUE ~ 0),
+         CORP_GROUP_TACT = case_when(product_type == 'CORPORATE' ~ 1,
+                             product_type == 'GROUP' ~ 1,
+                             product_type == 'TACTICAL MARKETING' ~ 1,
+                             TRUE ~ 0),
+         UNF_WHOLE_MEM_BUS = case_when(product_type == 'UNFENCED' ~ 1,
+                             product_type == 'WHOLESALE' ~ 1,
+                             product_type == 'MEMBERSHIP MARKETING' ~ 1,
+                             product_type == 'BUSINESS TRAVEL AGENCIES' ~ 1,
+                             TRUE ~ 0),
+         GOVERNMENT = case_when(product_type == 'GOVERNMENT' ~ 1,
+                             TRUE ~ 0)) %>% 
+  filter(!is.na(price), !is.na(daily_cxl_rev), !is.na(cummulative_cxl_rev), !is.na(dp_range))
+ 
+h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
 
+
+h2_test <- hot2[hot2$stay_dt > (max(hot2$stay_dt) - 21),]
+
+nrow(h2_train)
+nrow(h2_test)
+
+# save data that can be put into python
+
+write.csv(h2_train, "h2_train.csv")
+write.csv(h2_test, "h2_test.csv")
+
+
+# For MASE, use the average survival (= average survival rate of all training data * OTB) as the naive forecast.
+avg_svv_rt <- sum(h2_train$OTB_to_survive)/sum(h2_train$OTB)
+avg_svv_rt
 ```

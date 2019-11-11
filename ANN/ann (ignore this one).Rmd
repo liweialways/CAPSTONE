@@ -76,6 +76,8 @@ eval <- function(test){
                                   days_prior >=29 ~ '29_32')) %>% 
     group_by(dp_range) %>% 
     summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+  
+  
   tst_mape <- test %>%  
     filter(OTB_to_survive!=0, days_prior!=0) %>% 
     mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
@@ -96,7 +98,9 @@ eval <- function(test){
          abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>% 
     group_by(dp_range) %>% 
     summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
-  left_join(left_join(tst_mae,tst_mape, by=c("dp_range")), tst_mase, by=c("dp_range"))
+  report <- left_join(left_join(tst_mae,tst_mape, by=c("dp_range")), tst_mase, by=c("dp_range"))
+  report$dp_range <- factor(report$dp_range, levels = c("1_7","8_14","15_21","22_28","29_32"))
+  report[order(report$dp_range),]
 }
 
 ```
