@@ -937,8 +937,13 @@ left_join(left_join(mod1_7_mae,mod1_7_mape, by=c("dp_range")), mod1_7_mase, by=c
 
 ###__mod1_8__
 ```{r}
-h1_test$predict_cxl_rate <-  exp(predict(mod1_8, h1_test, se.fit=TRUE)$fit)
+h1_test$lin_predict_cxl_rate <-  exp(predict(mod1_8, h1_test, se.fit=TRUE)$fit)
 h1_test$fcst_svv <- h1_test$OTB - h1_test$OTB * h1_test$predict_cxl_rate
+
+#best model
+
+best_model_lin <- h1_test
+
 # MAE
 mod1_8_mae <- h1_test %>% 
   filter(days_prior!=0) %>% 
@@ -1297,6 +1302,11 @@ left_join(left_join(mod2_4_mae,mod2_4_mape, by=c("dp_range")), mod2_4_mase, by=c
 ```{r}
 h2_test$predict_cxl_rate <-  exp(predict(mod2_5, h2_test, se.fit=TRUE)$fit)
 h2_test$fcst_svv <- h2_test$OTB - h2_test$OTB * h2_test$predict_cxl_rate
+
+#best model
+
+best_model_lin_hot2 <- h1_test
+
 # MAE
 mod2_5_mae <- h2_test %>% 
   filter(days_prior!=0) %>% 
@@ -1336,6 +1346,8 @@ left_join(left_join(mod2_5_mae,mod2_5_mape, by=c("dp_range")), mod2_5_mase, by=c
 ```{r}
 h2_train$predict_cxl_rate <-  exp(predict(mod2_5, h2_train, se.fit=TRUE)$fit)
 h2_train$fcst_svv <- h2_train$OTB - h2_train$OTB * h2_train$predict_cxl_rate
+
+
 # MAE
 mod2_5_mae <- h2_train %>% 
   filter(days_prior!=0) %>% 

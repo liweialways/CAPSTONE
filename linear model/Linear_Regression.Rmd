@@ -137,6 +137,7 @@ hot2 <- hot2 %>%
                                                  TRUE ~ "MON/TUE/WED/THU")))
 h1_train <- hot1[hot1$stay_dt <= (max(hot1$stay_dt) - 21),]
 h2_train <- hot2[hot2$stay_dt <= (max(hot2$stay_dt) - 21),]
+
 ```
 
 
@@ -1277,5 +1278,8 @@ left_join(left_join(mod2_5_mae,mod2_5_mape, by=c("dp_range")), mod2_5_mase, by=c
 
 ```
 
+```{r}
+save.image("lin_reg_env.Rdata")
+```
 
 
