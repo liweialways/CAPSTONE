@@ -1,0 +1,781 @@
+---
+title: "Hotel Cancellation - Combined Model"
+author: "Caitlin Howansky & Wei Li"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+#__Get Data Ready__
+```{r message = FALSE, echo = FALSE, error = FALSE}
+# Clear environment of variables and functions
+#rm(list = ls(all = TRUE)) 
+# Clear environmet of packages
+#if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = #TRUE, unload = TRUE)
+```
+
+```{r, include=FALSE}
+
+# load package
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(tidyverse) 
+library(dplyr) # joins
+#library(janitor) # pretty cross-tabs
+library(kableExtra) # pretty html tables
+#library(formattable)
+#library(gridExtra)
+#library(scales)
+#library(pastecs)
+#library(GGally)
+#library(lubridate)
+#library(directlabels)
+#library(Metrics)
+library(tree)
+library(ISLR)
+```
+
+
+
+```{r}
+#load in workspaces from previos models
+load('env.RData') #knn
+load("dt_env.Rdata") #regression tree
+load("my_env.Rdata") #linear regression
+load("naive_env.Rdata") #naive model
+```
+
+```{r}
+# Mae, Mase, Mape function
+
+eval <- function(test){
+
+  test$fcst_svv <- test$OTB - test$OTB * test$predict_cxl_rate
+
+  tst_mae <- test %>%
+
+    filter(days_prior!=0) %>%
+
+    mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+
+                                  days_prior >=29 ~ '29_32')) %>%
+
+    group_by(dp_range) %>%
+
+    summarise(meanAE = mae(OTB_to_survive, fcst_svv))
+
+ 
+
+  
+
+  tst_mape <- test %>% 
+
+    filter(OTB_to_survive!=0, days_prior!=0) %>%
+
+    mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+
+                                  days_prior >=29 ~ '29_32')) %>%
+
+    group_by(dp_range) %>%
+
+    summarise(meanAPE = mape(OTB_to_survive, fcst_svv))
+
+  tst_mase <- test %>% 
+
+    filter(days_prior!=0) %>%
+
+    mutate(dp_range = case_when(days_prior >=1 & days_prior<=7 ~ '1_7',
+
+                                  days_prior >=8 & days_prior<=14 ~ '8_14',
+
+                                  days_prior >=15 & days_prior<=21 ~ '15_21',
+
+                                  days_prior >=22 & days_prior<=28 ~ '22_28',
+
+                                  days_prior >=29 ~ '29_32'),
+
+         abs_diff_1=abs(OTB_to_survive-fcst_svv),
+
+         abs_diff_2=abs(OTB_to_survive-avg_svv_rt*OTB)) %>%
+
+    group_by(dp_range) %>%
+
+    summarise(meanASE = sum(abs_diff_1)/sum(abs_diff_2))
+
+  report <- left_join(left_join(tst_mae,tst_mape, by=c("dp_range")), tst_mase, by=c("dp_range"))
+
+  report$dp_range <- factor(report$dp_range, levels = c("1_7","8_14","15_21","22_28","29_32"))
+
+  report[order(report$dp_range),]
+
+}
+```
+
+
+##__Atlanta Hotel__
+```{r}
+#best models for hotel 1
+
+best_naive #naive model
+best_model_lin  #linear model
+best_model_knn #knn
+best_model_rt #regression tree
+
+#read in csv for best ANN models produced from python
+best_model_ann <- read.csv("h1_test_with_fcst.csv")
+
+#combine into one dataframe to have a dataframe of all predicted cancellation rates
+
+best_model_knn$knn_predict_cxl_rate <-  best_model_knn$predict_cxl_rate
+best_model_rt$rt_predict_cxl_rate <-  best_model_rt$predict_cxl_rate
+best_naive$naive_predict_cxl_rate <- best_naive$predict_cxl_rate
+best_model_ann$ann_predict_cxl_rate <- best_model_ann$predict_cxl_rate
+
+best_model_ann$stay_dt <- as.Date(best_model_ann$stay_dt)
+
+
+hot1_best_df <- left_join(best_naive, best_model_lin, by = c('days_prior', 'stay_dt', 'product_type'))
+hot1_best_df <- left_join(hot1_best_df, best_model_knn, by = c('days_prior', 'stay_dt', 'product_type'))
+hot1_best_df <- left_join(hot1_best_df, best_model_rt, by = c('days_prior', 'stay_dt', 'product_type'))
+hot1_best_df <- left_join(hot1_best_df, best_model_ann, by = c('days_prior', 'stay_dt', 'product_type'))
+avg_svv_rt <- sum(hot1_best_df$OTB_to_survive.x)/sum(hot1_best_df$OTB.x)
+
+
+hot1_best_df <- data.frame(hot1_best_df$true_cxl_rate, hot1_best_df$naive_predict_cxl_rate, hot1_best_df$lin_predict_cxl_rate, hot1_best_df$knn_predict_cxl_rate, hot1_best_df$rt_predict_cxl_rate, hot1_best_df$OTB.x, hot1_best_df$OTB_to_survive.x, hot1_best_df$days_prior, hot1_best_df$ann_predict_cxl_rate)
+
+#rename columns
+hot1_best_df$true_cxl_rate <- hot1_best_df$hot1_best_df.true_cxl_rate
+hot1_best_df$naive_predict_cxl_rate <- hot1_best_df$hot1_best_df.naive_predict_cxl_rate
+hot1_best_df$lin_predict_cxl_rate <- hot1_best_df$hot1_best_df.lin_predict_cxl_rate
+hot1_best_df$knn_predict_cxl_rate <- hot1_best_df$hot1_best_df.knn_predict_cxl_rate
+hot1_best_df$rt_predict_cxl_rate <- hot1_best_df$hot1_best_df.rt_predict_cxl_rate
+hot1_best_df$OTB <- hot1_best_df$hot1_best_df.OTB.x
+hot1_best_df$OTB_to_survive <- hot1_best_df$hot1_best_df.OTB_to_survive.x
+hot1_best_df$days_prior <- hot1_best_df$hot1_best_df.days_prior
+hot1_best_df$ann_predict_cxl_rate <- hot1_best_df$hot1_best_df.ann_predict_cxl_rate
+
+```
+
+```{r}
+#run linear regression of all to find weights
+all_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df)
+summary(all_mod)
+```
+
+```{r}
+#new prediction given above weights
+
+hot1_best_df$predict_cxl_rate = (hot1_best_df$naive_predict_cxl_rate*0.4299761 + hot1_best_df$lin_predict_cxl_rate*-0.0119709 + hot1_best_df$knn_predict_cxl_rate*-0.0345080 +hot1_best_df$rt_predict_cxl_rate*0.0660017 + hot1_best_df$ann_predict_cxl_rate*-0.0500767)
+
+
+eval(hot1_best_df)
+```
+
+```{r}
+#try to do by different days of week
+hot1_best_df_dp1 <- hot1_best_df[hot1_best_df$days_prior <= 7, ] 
+hot1_best_df_dp2 <- hot1_best_df[hot1_best_df$days_prior <= 14, ]
+hot1_best_df_dp3 <- hot1_best_df[hot1_best_df$days_prior <= 21, ]
+hot1_best_df_dp4 <- hot1_best_df[hot1_best_df$days_prior <= 28, ]
+hot1_best_df_dp5 <- hot1_best_df[hot1_best_df$days_prior <= 32, ]
+```
+
+
+```{r}
+#run linear regression based on different groups
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot1_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot1_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot1_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot1_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot1_best_df_dp5)
+summary(all_dp5_mod)
+```
+
+```{r}
+#create new predictions
+hot1_best_df_dp1$predict_cxl_rate = (hot1_best_df_dp1$naive_predict_cxl_rate*0.863681 + hot1_best_df_dp1$lin_predict_cxl_rate*0.017568 + hot1_best_df_dp1$knn_predict_cxl_rate*0.076455 +hot1_best_df_dp1$rt_predict_cxl_rate*-0.002586)
+
+hot1_best_df_dp2$predict_cxl_rate = (hot1_best_df_dp2$naive_predict_cxl_rate*0.813693 + hot1_best_df_dp2$lin_predict_cxl_rate*-0.014766 + hot1_best_df_dp2$knn_predict_cxl_rate*0.003522 +hot1_best_df_dp2$rt_predict_cxl_rate*0.013281)
+
+hot1_best_df_dp3$predict_cxl_rate = (hot1_best_df_dp3$naive_predict_cxl_rate*0.5892851 + hot1_best_df_dp3$lin_predict_cxl_rate*-0.0213036 + hot1_best_df_dp3$knn_predict_cxl_rate*-0.0371264 +hot1_best_df_dp3$rt_predict_cxl_rate*0.0408696)
+
+hot1_best_df_dp4$predict_cxl_rate = (hot1_best_df_dp4$naive_predict_cxl_rate*0.4727465 + hot1_best_df_dp4$lin_predict_cxl_rate*-0.0195308 + hot1_best_df_dp4$knn_predict_cxl_rate*-0.0480952 +hot1_best_df_dp4$rt_predict_cxl_rate*-0.0480952)
+
+hot1_best_df_dp5$predict_cxl_rate = (hot1_best_df_dp5$naive_predict_cxl_rate*0.5033760 + hot1_best_df_dp5$lin_predict_cxl_rate*-0.0228510 + hot1_best_df_dp5$knn_predict_cxl_rate*-0.0463775 +hot1_best_df_dp5$rt_predict_cxl_rate*0.0402261)
+
+
+hot1_best_grouped <- merge(hot1_best_df_dp1,hot1_best_df_dp2, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp3, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp4, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp5, all = TRUE)
+
+eval(hot1_best_grouped)
+```
+
+```{r}
+#choose naive and linear
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot1_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot1_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot1_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot1_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot1_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+```{r}
+#create new predictions
+hot1_best_df_dp1$predict_cxl_rate = (hot1_best_df_dp1$naive_predict_cxl_rate*0.906583 + hot1_best_df_dp1$lin_predict_cxl_rate*0.025763)
+
+hot1_best_df_dp2$predict_cxl_rate = (hot1_best_df_dp2$naive_predict_cxl_rate*0.8224800 + hot1_best_df_dp2$lin_predict_cxl_rate*-0.0120550)
+
+hot1_best_df_dp3$predict_cxl_rate = (hot1_best_df_dp3$naive_predict_cxl_rate*0.5766591 + hot1_best_df_dp3$lin_predict_cxl_rate*-0.0205055)
+
+hot1_best_df_dp4$predict_cxl_rate = (hot1_best_df_dp4$naive_predict_cxl_rate*0.4452861 + hot1_best_df_dp4$lin_predict_cxl_rate*-0.0173648)
+
+hot1_best_df_dp5$predict_cxl_rate = (hot1_best_df_dp5$naive_predict_cxl_rate*0.4732764 + hot1_best_df_dp5$lin_predict_cxl_rate*-0.0183609 )
+
+
+hot1_best_grouped <- merge(hot1_best_df_dp1,hot1_best_df_dp2, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp3, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp4, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp5, all = TRUE)
+
+eval(hot1_best_grouped)
+```
+
+- best model for hotel 1
+
+
+```{r}
+#choose naive and knn
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+
+```{r}
+#create new predictions
+hot1_best_df_dp1$predict_cxl_rate = (hot1_best_df_dp1$naive_predict_cxl_rate*0.8664133 + hot1_best_df_dp1$knn_predict_cxl_rate*0.0843757)
+
+hot1_best_df_dp2$predict_cxl_rate = (hot1_best_df_dp2$naive_predict_cxl_rate*0.81186544 + hot1_best_df_dp2$knn_predict_cxl_rate*0.00004591)
+
+hot1_best_df_dp3$predict_cxl_rate = (hot1_best_df_dp3$naive_predict_cxl_rate*0.5811013 + hot1_best_df_dp3$knn_predict_cxl_rate*-0.0349455)
+
+hot1_best_df_dp4$predict_cxl_rate = (hot1_best_df_dp4$naive_predict_cxl_rate*0.455627 + hot1_best_df_dp4$knn_predict_cxl_rate*-0.042082)
+
+hot1_best_df_dp5$predict_cxl_rate = (hot1_best_df_dp5$naive_predict_cxl_rate*0.4789549 + hot1_best_df_dp5$knn_predict_cxl_rate*-0.0413892 )
+
+
+hot1_best_grouped <- merge(hot1_best_df_dp1,hot1_best_df_dp2, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp3, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp4, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp5, all = TRUE)
+
+eval(hot1_best_grouped)
+```
+
+
+```{r}
+#choose rt and knn
+all_dp1_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot1_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+```{r}
+#create new predictions
+hot1_best_df_dp1$predict_cxl_rate = (hot1_best_df_dp1$rt_predict_cxl_rate*0.065694 + hot1_best_df_dp1$knn_predict_cxl_rate*0.249263)
+
+hot1_best_df_dp2$predict_cxl_rate = (hot1_best_df_dp2$rt_predict_cxl_rate*0.0888838 + hot1_best_df_dp2$knn_predict_cxl_rate*0.0957111)
+
+hot1_best_df_dp3$predict_cxl_rate = (hot1_best_df_dp3$rt_predict_cxl_rate*0.079985 + hot1_best_df_dp3$knn_predict_cxl_rate*0.065289)
+
+hot1_best_df_dp4$predict_cxl_rate = (hot1_best_df_dp4$rt_predict_cxl_rate*0.0690366 + hot1_best_df_dp4$knn_predict_cxl_rate*0.0451712)
+
+hot1_best_df_dp5$predict_cxl_rate = (hot1_best_df_dp5$rt_predict_cxl_rate*0.0527287 + hot1_best_df_dp5$knn_predict_cxl_rate*0.0418080)
+
+
+hot1_best_grouped <- merge(hot1_best_df_dp1,hot1_best_df_dp2, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp3, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp4, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp5, all = TRUE)
+
+eval(hot1_best_grouped)
+```
+
+
+
+
+
+```{r}
+#choose naive and ann
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+
+```{r}
+#create new predictions
+hot1_best_df_dp1$predict_cxl_rate = (hot1_best_df_dp1$naive_predict_cxl_rate*0.9376770 + hot1_best_df_dp1$ann_predict_cxl_rate*-0.0247578)
+
+hot1_best_df_dp2$predict_cxl_rate = (hot1_best_df_dp2$naive_predict_cxl_rate*0.771858 + hot1_best_df_dp2$ann_predict_cxl_rate*-0.021425)
+
+hot1_best_df_dp3$predict_cxl_rate = (hot1_best_df_dp3$naive_predict_cxl_rate*0.4963615 + hot1_best_df_dp3$ann_predict_cxl_rate*-0.0506012)
+
+hot1_best_df_dp4$predict_cxl_rate = (hot1_best_df_dp4$naive_predict_cxl_rate*0.3630495  + hot1_best_df_dp4$ann_predict_cxl_rate*-0.0367572)
+
+hot1_best_df_dp5$predict_cxl_rate = (hot1_best_df_dp5$naive_predict_cxl_rate* 0.3888787 + hot1_best_df_dp5$ann_predict_cxl_rate*-0.0292417 )
+
+
+hot1_best_grouped <- merge(hot1_best_df_dp1,hot1_best_df_dp2, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp3, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp4, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp5, all = TRUE)
+
+eval(hot1_best_grouped)
+```
+
+- Linear Regression and naive results in the best model
+
+```{r}
+#choose knn and ann
+all_dp1_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot1_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+
+```{r}
+#create new predictions
+hot1_best_df_dp1$predict_cxl_rate = (hot1_best_df_dp1$knn_predict_cxl_rate*0.202022 + hot1_best_df_dp1$ann_predict_cxl_rate*-0.066018)
+
+hot1_best_df_dp2$predict_cxl_rate = (hot1_best_df_dp2$knn_predict_cxl_rate*0.0785212 + hot1_best_df_dp2$ann_predict_cxl_rate*-0.0229398)
+
+hot1_best_df_dp3$predict_cxl_rate = (hot1_best_df_dp3$knn_predict_cxl_rate*0.0578908 + hot1_best_df_dp3$ann_predict_cxl_rate*-0.0143132)
+
+hot1_best_df_dp4$predict_cxl_rate = (hot1_best_df_dp4$knn_predict_cxl_rate*0.036240  + hot1_best_df_dp4$ann_predict_cxl_rate*-0.002983)
+
+hot1_best_df_dp5$predict_cxl_rate = (hot1_best_df_dp5$knn_predict_cxl_rate*0.0309701 + hot1_best_df_dp5$ann_predict_cxl_rate*0.0007960 )
+
+
+hot1_best_grouped <- merge(hot1_best_df_dp1,hot1_best_df_dp2, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp3, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp4, all = TRUE)
+hot1_best_grouped <- merge(hot1_best_grouped,hot1_best_df_dp5, all = TRUE)
+
+eval(hot1_best_grouped)
+```
+
+
+##__NY Hotel__
+```{r}
+#best models for hotel 2
+
+best_naive_hot2 #naive model
+best_model_lin_hot2  #linear model
+best_model_knn_hot2 #knn
+best_model_rt_hot2 #regression tree
+
+#bring in csv with ann best model from python
+best_model_ann_hot2 <- read.csv("h2_test_with_fcst.csv")
+
+
+#combine into one dataframe to have a dataframe of all predicted cancellation rates
+
+best_model_knn_hot2$knn_predict_cxl_rate <-  best_model_knn_hot2$predict_cxl_rate
+best_model_rt_hot2$rt_predict_cxl_rate <-  best_model_rt_hot2$predict_cxl_rate
+best_naive_hot2$naive_predict_cxl_rate <- best_naive_hot2$predict_cxl_rate
+best_model_lin_hot2$lin_predict_cxl_rate <- best_model_lin_hot2$predict_cxl_rate
+best_model_ann_hot2$ann_predict_cxl_rate <- best_model_ann_hot2$predict_cxl_rate
+
+best_model_ann_hot2$stay_dt <-  as.Date(best_model_ann_hot2$stay_dt)
+
+
+hot2_best_df <- left_join(best_naive_hot2, best_model_lin_hot2, by = c('days_prior', 'stay_dt', 'product_type'))
+hot2_best_df <- left_join(hot2_best_df, best_model_knn_hot2, by = c('days_prior', 'stay_dt', 'product_type'))
+hot2_best_df <- left_join(hot2_best_df, best_model_rt_hot2, by = c('days_prior', 'stay_dt', 'product_type'))
+hot2_best_df <- left_join(hot2_best_df, best_model_ann_hot2, by = c('days_prior', 'stay_dt', 'product_type'))
+avg_svv_rt <- sum(hot2_best_df$OTB_to_survive.x)/sum(hot2_best_df$OTB.x)
+
+
+
+hot2_best_df <- data.frame(hot2_best_df$true_cxl_rate, hot2_best_df$naive_predict_cxl_rate, hot2_best_df$lin_predict_cxl_rate, hot2_best_df$knn_predict_cxl_rate, hot2_best_df$rt_predict_cxl_rate, hot2_best_df$OTB.x, hot2_best_df$OTB_to_survive.x, hot2_best_df$days_prior, hot2_best_df$ann_predict_cxl_rate)
+
+#rename columns
+hot2_best_df$true_cxl_rate <- hot2_best_df$hot2_best_df.true_cxl_rate
+hot2_best_df$naive_predict_cxl_rate <- hot2_best_df$hot2_best_df.naive_predict_cxl_rate
+hot2_best_df$lin_predict_cxl_rate <- hot2_best_df$hot2_best_df.lin_predict_cxl_rate
+hot2_best_df$knn_predict_cxl_rate <- hot2_best_df$hot2_best_df.knn_predict_cxl_rate
+hot2_best_df$ann_predict_cxl_rate <- hot2_best_df$hot2_best_df.ann_predict_cxl_rate
+hot2_best_df$rt_predict_cxl_rate <- hot2_best_df$hot2_best_df.rt_predict_cxl_rate
+hot2_best_df$OTB <- hot2_best_df$hot2_best_df.OTB.x
+hot2_best_df$OTB_to_survive <- hot2_best_df$hot2_best_df.OTB_to_survive.x
+hot2_best_df$days_prior <- hot2_best_df$hot2_best_df.days_prior
+
+
+```
+
+```{r}
+#run linear regression of all to find weights
+all_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df)
+summary(all_mod)
+```
+
+```{r}
+#new prediction given above weights
+
+hot2_best_df$predict_cxl_rate = (hot2_best_df$naive_predict_cxl_rate*0.7252092 + hot2_best_df$lin_predict_cxl_rate*0.4902670 + hot2_best_df$knn_predict_cxl_rate*-0.0158912 +hot2_best_df$rt_predict_cxl_rate*0.0032151 + hot2_best_df$ann_predict_cxl_rate*-0.2750477)
+
+
+eval(hot2_best_df)
+```
+
+
+```{r}
+#try to do by different days of week
+hot2_best_df_dp1 <- hot2_best_df[hot2_best_df$days_prior <= 7, ] 
+hot2_best_df_dp2 <- hot2_best_df[hot2_best_df$days_prior <= 14, ]
+hot2_best_df_dp3 <- hot2_best_df[hot2_best_df$days_prior <= 21, ]
+hot2_best_df_dp4 <- hot2_best_df[hot2_best_df$days_prior <= 28, ]
+hot2_best_df_dp5 <- hot2_best_df[hot2_best_df$days_prior <= 32, ]
+```
+
+
+```{r}
+#run linear regression based on different groups
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot2_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot2_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot2_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot2_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate + knn_predict_cxl_rate + rt_predict_cxl_rate, data = hot2_best_df_dp5)
+summary(all_dp5_mod)
+```
+
+
+
+```{r}
+#create new predictions
+hot2_best_df_dp1$predict_cxl_rate = (hot2_best_df_dp1$naive_predict_cxl_rate*0.934751 + hot2_best_df_dp1$lin_predict_cxl_rate*-0.003968 + hot2_best_df_dp1$knn_predict_cxl_rate*-0.049040 +hot2_best_df_dp1$rt_predict_cxl_rate*0.026188)
+
+hot2_best_df_dp2$predict_cxl_rate = (hot2_best_df_dp2$naive_predict_cxl_rate*1.309082 + hot2_best_df_dp2$lin_predict_cxl_rate*-0.005892 + hot2_best_df_dp2$knn_predict_cxl_rate*-0.303214 +hot2_best_df_dp2$rt_predict_cxl_rate*-0.071875)
+
+hot2_best_df_dp3$predict_cxl_rate = (hot2_best_df_dp3$naive_predict_cxl_rate*1.2606622 + hot2_best_df_dp3$lin_predict_cxl_rate*-0.0174396 + hot2_best_df_dp3$knn_predict_cxl_rate*-0.3234571 +hot2_best_df_dp3$rt_predict_cxl_rate*-0.0070530)
+
+hot2_best_df_dp4$predict_cxl_rate = (hot2_best_df_dp4$naive_predict_cxl_rate*1.1071242 + hot2_best_df_dp4$lin_predict_cxl_rate*-0.0195308 + hot2_best_df_dp4$knn_predict_cxl_rate*-0.1379604 +hot2_best_df_dp4$rt_predict_cxl_rate*0.0009181)
+
+hot2_best_df_dp5$predict_cxl_rate = (hot2_best_df_dp5$naive_predict_cxl_rate*1.0589208 + hot2_best_df_dp5$lin_predict_cxl_rate*-0.0190952 + hot2_best_df_dp5$knn_predict_cxl_rate*-0.0816610 +hot2_best_df_dp5$rt_predict_cxl_rate*0.0050087)
+
+
+hot2_best_grouped <- merge(hot2_best_df_dp1,hot2_best_df_dp2, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp3, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp4, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp5, all = TRUE)
+
+
+
+
+eval(hot2_best_grouped)
+```
+```{r}
+#choose naive and linear
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot2_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot2_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot2_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot2_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + lin_predict_cxl_rate, data = hot2_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+```{r}
+#create new predictions
+hot2_best_df_dp1$predict_cxl_rate = (hot2_best_df_dp1$naive_predict_cxl_rate*0.908689 + hot2_best_df_dp1$lin_predict_cxl_rate*-0.004495)
+
+hot2_best_df_dp2$predict_cxl_rate = (hot2_best_df_dp2$naive_predict_cxl_rate*1.007202 + hot2_best_df_dp2$lin_predict_cxl_rate*-0.018085)
+
+hot2_best_df_dp3$predict_cxl_rate = (hot2_best_df_dp3$naive_predict_cxl_rate*0.96364090 + hot2_best_df_dp3$lin_predict_cxl_rate*-0.02857291)
+
+hot2_best_df_dp4$predict_cxl_rate = (hot2_best_df_dp4$naive_predict_cxl_rate*0.9723992 + hot2_best_df_dp4$lin_predict_cxl_rate*-0.0287762)
+
+hot2_best_df_dp5$predict_cxl_rate = (hot2_best_df_dp5$naive_predict_cxl_rate*0.9807816 + hot2_best_df_dp5$lin_predict_cxl_rate*-0.0256980 )
+
+
+hot2_best_grouped <- merge(hot2_best_df_dp1,hot2_best_df_dp2, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp3, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp4, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp5, all = TRUE)
+
+eval(hot2_best_grouped)
+```
+
+
+```{r}
+#choose naive and knn
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+
+```{r}
+#create new predictions
+hot2_best_df_dp1$predict_cxl_rate = (hot2_best_df_dp1$naive_predict_cxl_rate*0.9029219 + hot2_best_df_dp1$knn_predict_cxl_rate*-0.0570108)
+
+hot2_best_df_dp2$predict_cxl_rate = (hot2_best_df_dp2$naive_predict_cxl_rate*1.1392941 + hot2_best_df_dp2$knn_predict_cxl_rate*-0.2277196)
+
+hot2_best_df_dp3$predict_cxl_rate = (hot2_best_df_dp3$naive_predict_cxl_rate*1.1318749 + hot2_best_df_dp3$knn_predict_cxl_rate*-0.2393399)
+
+hot2_best_df_dp4$predict_cxl_rate = (hot2_best_df_dp4$naive_predict_cxl_rate*1.0307178 + hot2_best_df_dp4$knn_predict_cxl_rate*-0.1118948)
+
+hot2_best_df_dp5$predict_cxl_rate = (hot2_best_df_dp5$naive_predict_cxl_rate*0.9940968 + hot2_best_df_dp5$knn_predict_cxl_rate*-0.0636097)
+
+
+hot2_best_grouped <- merge(hot2_best_df_dp1,hot2_best_df_dp2, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp3, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp4, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp5, all = TRUE)
+
+eval(hot2_best_grouped)
+```
+
+
+
+```{r}
+#choose rt and knn
+all_dp1_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ rt_predict_cxl_rate + knn_predict_cxl_rate, data = hot2_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+```{r}
+#create new predictions
+hot2_best_df_dp1$predict_cxl_rate = (hot2_best_df_dp1$rt_predict_cxl_rate*0.210950 + hot2_best_df_dp1$knn_predict_cxl_rate*0.478290)
+
+hot2_best_df_dp2$predict_cxl_rate = (hot2_best_df_dp2$rt_predict_cxl_rate*0.313697 + hot2_best_df_dp2$knn_predict_cxl_rate*0.426355)
+
+hot2_best_df_dp3$predict_cxl_rate = (hot2_best_df_dp3$rt_predict_cxl_rate*0.1540549 + hot2_best_df_dp3$knn_predict_cxl_rate*0.4895428)
+
+hot2_best_df_dp4$predict_cxl_rate = (hot2_best_df_dp4$rt_predict_cxl_rate*0.1211626 + hot2_best_df_dp4$knn_predict_cxl_rate*0.5143450)
+
+hot2_best_df_dp5$predict_cxl_rate = (hot2_best_df_dp5$rt_predict_cxl_rate*0.1152467 + hot2_best_df_dp5$knn_predict_cxl_rate*0.5265252)
+
+
+hot2_best_grouped <- merge(hot2_best_df_dp1,hot2_best_df_dp2, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp3, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp4, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp5, all = TRUE)
+
+eval(hot2_best_grouped)
+```
+
+- best result for hotel 2
+
+
+```{r}
+#choose naive and ann
+all_dp1_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ naive_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+
+```{r}
+#create new predictions
+hot2_best_df_dp1$predict_cxl_rate = (hot2_best_df_dp1$naive_predict_cxl_rate*0.7960782 + hot2_best_df_dp1$ann_predict_cxl_rate*0.0478730)
+
+hot2_best_df_dp2$predict_cxl_rate = (hot2_best_df_dp2$naive_predict_cxl_rate*1.0162450 + hot2_best_df_dp2$ann_predict_cxl_rate*-0.0950647)
+
+hot2_best_df_dp3$predict_cxl_rate = (hot2_best_df_dp3$naive_predict_cxl_rate*1.0737127 + hot2_best_df_dp3$ann_predict_cxl_rate*-0.2155685)
+
+hot2_best_df_dp4$predict_cxl_rate = (hot2_best_df_dp4$naive_predict_cxl_rate*1.1086385 + hot2_best_df_dp4$ann_predict_cxl_rate*-0.2363529)
+
+hot2_best_df_dp5$predict_cxl_rate = (hot2_best_df_dp5$naive_predict_cxl_rate*1.1039032 + hot2_best_df_dp5$ann_predict_cxl_rate*-0.2137716)
+
+
+hot2_best_grouped <- merge(hot2_best_df_dp1,hot2_best_df_dp2, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp3, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp4, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp5, all = TRUE)
+
+eval(hot2_best_grouped)
+```
+
+```{r}
+#choose knn and ann
+all_dp1_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp1)
+summary(all_dp1_mod)
+
+all_dp2_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp2)
+summary(all_dp2_mod)
+
+all_dp3_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp3)
+summary(all_dp3_mod)
+
+all_dp4_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp4)
+summary(all_dp4_mod)
+
+all_dp5_mod <- lm(formula = true_cxl_rate ~ knn_predict_cxl_rate + ann_predict_cxl_rate, data = hot2_best_df_dp5)
+summary(all_dp5_mod)
+
+```
+
+
+```{r}
+#create new predictions
+hot2_best_df_dp1$predict_cxl_rate = (hot2_best_df_dp1$knn_predict_cxl_rate*0.432919 + hot2_best_df_dp1$ann_predict_cxl_rate*0.185709)
+
+hot2_best_df_dp2$predict_cxl_rate = (hot2_best_df_dp2$knn_predict_cxl_rate*0.351639  + hot2_best_df_dp2$ann_predict_cxl_rate*0.358835)
+
+hot2_best_df_dp3$predict_cxl_rate = (hot2_best_df_dp3$knn_predict_cxl_rate*0.3400077 + hot2_best_df_dp3$ann_predict_cxl_rate*0.350025)
+
+hot2_best_df_dp4$predict_cxl_rate = (hot2_best_df_dp4$knn_predict_cxl_rate*0.3806220 + hot2_best_df_dp4$ann_predict_cxl_rate*0.3230844)
+
+hot2_best_df_dp5$predict_cxl_rate = (hot2_best_df_dp5$knn_predict_cxl_rate*0.3905294 + hot2_best_df_dp5$ann_predict_cxl_rate*0.3279187)
+
+
+hot2_best_grouped <- merge(hot2_best_df_dp1,hot2_best_df_dp2, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp3, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp4, all = TRUE)
+hot2_best_grouped <- merge(hot2_best_grouped,hot2_best_df_dp5, all = TRUE)
+
+eval(hot2_best_grouped)
+```
